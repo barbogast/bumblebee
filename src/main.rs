@@ -67,21 +67,6 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
     Ok(HEXUPPER.encode(digest.as_ref()))
 }
 
-fn analyze(
-    dir_a_content: &HashSet<String>,
-    dir_b_content: &HashSet<String>,
-) -> StructureCompareResult {
-    let missing_in_dir_a: Vec<String> =
-        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect());
-    let missing_in_dir_b: Vec<String> =
-        remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect());
-
-    StructureCompareResult {
-        missing_in_dir_a,
-        missing_in_dir_b,
-    }
-}
-
 fn compare_file_contents(
     dir_a_content: HashSet<String>,
     dir_b_content: HashSet<String>,
@@ -110,6 +95,21 @@ fn compare_file_contents(
         differing_content,
         file_and_directory,
     })
+}
+
+fn analyze(
+    dir_a_content: &HashSet<String>,
+    dir_b_content: &HashSet<String>,
+) -> StructureCompareResult {
+    let missing_in_dir_a: Vec<String> =
+        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect());
+    let missing_in_dir_b: Vec<String> =
+        remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect());
+
+    StructureCompareResult {
+        missing_in_dir_a,
+        missing_in_dir_b,
+    }
 }
 
 fn main() {
