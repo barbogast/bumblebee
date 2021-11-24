@@ -1,42 +1,6 @@
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::fs;
-use std::io;
-use std::path::Path;
 use walkdir::WalkDir;
-
-fn read_directories() -> io::Result<(
-    std::vec::Vec<std::path::PathBuf>,
-    std::vec::Vec<std::path::PathBuf>,
-)> {
-    let entries1 = fs::read_dir(".")?
-        .map(|res| res.map(|e| e.path()))
-        .collect::<Result<Vec<_>, io::Error>>()?;
-
-    let entries2 = fs::read_dir(".")?
-        .map(|res| res.map(|e| e.path()))
-        .collect::<Result<Vec<_>, io::Error>>()?;
-
-    Ok((entries1, entries2))
-}
-
-// one possible implementation of walking a directory only visiting files
-fn visit_dirs(dir: &Path, cb: &dyn Fn(&std::fs::DirEntry)) -> io::Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                visit_dirs(&path, cb)?;
-            } else {
-                cb(&entry);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn xx(dir_entry: &std::fs::DirEntry) {}
 
 fn get_directory_content_recursively(dir: String) -> HashSet<String> {
     let mut filenames: HashSet<String> = HashSet::new();
@@ -89,30 +53,6 @@ fn run_test(path: &str) -> Missing {
 }
 
 fn main() {
-    println!("Hello, world!");
-    match read_directories() {
-        Err(why) => {
-            println!("! {:?}", why.kind());
-            return ();
-        }
-        Ok(folder_entries) => {
-            dbg!(folder_entries)
-        }
-    };
-
-    match visit_dirs(Path::new("./test/test_files_match"), &xx) {
-        Ok(res) => println!("! {:?}", res),
-        Err(why) => println!("! {:?}", why.kind()),
-    }
-
-    let dirA_content =
-        get_directory_content_recursively(String::from("./test/01_test_files_match/dirA"));
-    let dirB_content =
-        get_directory_content_recursively(String::from("./test/01_test_files_match/dirB"));
-
-    let result = analyze(dirA_content, dirB_content);
-    dbg!("result 01", result);
-
     let dirA_content =
         get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirA"));
     let dirB_content =
@@ -120,35 +60,6 @@ fn main() {
 
     let result = analyze(dirA_content, dirB_content);
     dbg!("result 02", result);
-
-    let dirA_content =
-        get_directory_content_recursively(String::from("./test/04_dirA_lacks_sub_directory/dirA"));
-    let dirB_content =
-        get_directory_content_recursively(String::from("./test/04_dirA_lacks_sub_directory/dirB"));
-
-    let result = analyze(dirA_content, dirB_content);
-    dbg!("result 04", result);
-
-    // for entry in dirA_content {
-    // }
-
-    // match fs::read_dir("./test").and(fs::read_dir("./test/test_files_match")) {
-    // match fs::read_dir("./test").unwrap_() {
-    //     Err(why) => println!("! {:?}", why.kind()),
-    //     Ok(paths) => {
-    //         for path in paths {
-    //             println!("> {:?}", path.unwrap().path());
-    //         }
-    //     }
-    // }
-    // match fs::read_dir("../bumblebee") {
-    //     Err(why) => println!("! {:?}", why.kind()),
-    //     Ok(paths) => {
-    //         for path in paths {
-    //             println!("> {:?}", path.unwrap().path());
-    //         }
-    //     }
-    // }
 }
 
 #[cfg(test)]
