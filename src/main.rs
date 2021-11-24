@@ -18,7 +18,7 @@ struct ContentCompareResult {
     file_and_directory: Vec<String>,
 }
 
-fn get_directory_content_recursively(dir: String) -> HashSet<String> {
+fn get_directory_content_recursively(dir: &String) -> HashSet<String> {
     let mut filenames: HashSet<String> = HashSet::new();
 
     for result in WalkDir::new(&dir).into_iter() {
@@ -68,11 +68,11 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
 }
 
 fn compare_file_contents(
-    dir_a_content: HashSet<String>,
-    dir_b_content: HashSet<String>,
+    dir_a_content: &HashSet<String>,
+    dir_b_content: &HashSet<String>,
     dir_a_path: &String,
     dir_b_path: &String,
-) -> Result<ContentCompareResult, std::io::Error> {
+) -> ContentCompareResult {
     let mut differing_content: Vec<String> = Vec::new();
     let mut file_and_directory: Vec<String> = Vec::new();
 
@@ -81,8 +81,20 @@ fn compare_file_contents(
         let path_a = std::path::Path::new(&dir_a_path).join(path);
         let path_b = std::path::Path::new(&dir_b_path).join(path);
         if path_a.is_file() && path_b.is_file() {
-            let hash_a = get_file_content_hash(path_a)?;
-            let hash_b = get_file_content_hash(path_b)?;
+            let hash_a = match get_file_content_hash(path_a) {
+                Err(why) => {
+                    println!("{:?}", why); // TODO: process error
+                    continue;
+                }
+                Ok(res) => res,
+            };
+            let hash_b = match get_file_content_hash(path_b) {
+                Err(why) => {
+                    println!("{:?}", why); // TODO: process error
+                    continue;
+                }
+                Ok(res) => res,
+            };
             if hash_a != hash_b {
                 differing_content.push(path.clone());
             }
@@ -91,10 +103,10 @@ fn compare_file_contents(
         }
     }
 
-    Ok(ContentCompareResult {
+    ContentCompareResult {
         differing_content,
         file_and_directory,
-    })
+    }
 }
 
 fn analyze(
@@ -114,24 +126,20 @@ fn analyze(
 
 fn main() {
     let dir_a_content =
-        get_directory_content_recursively(String::from("./test/08_file_and_directory/dirA"));
+        get_directory_content_recursively(&String::from("./test/08_file_and_directory/dirA"));
     let dir_b_content =
-        get_directory_content_recursively(String::from("./test/08_file_and_directory/dirB"));
+        get_directory_content_recursively(&String::from("./test/08_file_and_directory/dirB"));
 
     let result = analyze(&dir_a_content, &dir_b_content);
-    let differing = match compare_file_contents(
-        dir_a_content,
-        dir_b_content,
+    dbg!("result 02", result);
+
+    let content_compare_result = compare_file_contents(
+        &dir_a_content,
+        &dir_b_content,
         &String::from("./test/08_file_and_directory/dirA"),
         &String::from("./test/08_file_and_directory/dirB"),
-    ) {
-        Err(why) => {
-            println!("! {:?}", why);
-            return;
-        }
-        Ok(res) => res,
-    };
-    dbg!("result 02", result, differing);
+    );
+    dbg!("result 02", content_compare_result);
 }
 
 #[cfg(test)]
@@ -139,16 +147,26 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn run_test(path: &str) -> StructureCompareResult {
+    fn call_structure_compare(path: &str) -> StructureCompareResult {
         analyze(
-            &get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
-            &get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
+            &get_directory_content_recursively(&(String::from("./test/") + path + "/dirA")),
+            &get_directory_content_recursively(&(String::from("./test/") + path + "/dirB")),
+        )
+    }
+    fn call_content_compare(path: &str) -> ContentCompareResult {
+        let path_a = String::from("./test/") + path + "/dirA";
+        let path_b = String::from("./test/") + path + "/dirB";
+        compare_file_contents(
+            &get_directory_content_recursively(&path_a),
+            &get_directory_content_recursively(&path_b),
+            &path_a,
+            &path_b,
         )
     }
     #[test]
     fn t_01_test_files_match() {
         assert_eq!(
-            run_test("01_test_files_match"),
+            call_structure_compare("01_test_files_match"),
             StructureCompareResult {
                 missing_in_dir_a: Vec::new(),
                 missing_in_dir_b: Vec::new()
@@ -159,7 +177,7 @@ mod tests {
     #[test]
     fn t_02_dir_a_lacks_file() {
         assert_eq!(
-            run_test("02_dirA_lacks_file"),
+            call_structure_compare("02_dirA_lacks_file"),
             StructureCompareResult {
                 missing_in_dir_a: [String::from("file2.txt")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
@@ -170,7 +188,7 @@ mod tests {
     #[test]
     fn t_03_dir_b_lacks_file() {
         assert_eq!(
-            run_test("03_dirB_lacks_file"),
+            call_structure_compare("03_dirB_lacks_file"),
             StructureCompareResult {
                 missing_in_dir_a: [].to_vec(),
                 missing_in_dir_b: [String::from("file1.txt")].to_vec(),
@@ -181,7 +199,7 @@ mod tests {
     #[test]
     fn t_04_dir_a_lacks_sub_directory() {
         assert_eq!(
-            run_test("04_dirA_lacks_sub_directory"),
+            call_structure_compare("04_dirA_lacks_sub_directory"),
             StructureCompareResult {
                 missing_in_dir_a: [String::from("subdir2")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
@@ -192,10 +210,43 @@ mod tests {
     #[test]
     fn t_05_dir_a_lacks_file_in_sub_directory() {
         assert_eq!(
-            run_test("05_dirA_lacks_file_in_sub_directory"),
+            call_structure_compare("05_dirA_lacks_file_in_sub_directory"),
             StructureCompareResult {
                 missing_in_dir_a: [String::from("subdir2/file2.txt")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_06_different_text_content() {
+        assert_eq!(
+            call_content_compare("06_different_text_content"),
+            ContentCompareResult {
+                differing_content: [String::from("file1.txt")].to_vec(),
+                file_and_directory: [].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_07_different_binary_content() {
+        assert_eq!(
+            call_content_compare("07_different_binary_content"),
+            ContentCompareResult {
+                differing_content: [String::from("file1.jpeg")].to_vec(),
+                file_and_directory: [].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_08_file_and_directory() {
+        assert_eq!(
+            call_content_compare("08_file_and_directory"),
+            ContentCompareResult {
+                differing_content: [].to_vec(),
+                file_and_directory: [String::from("file1.txt")].to_vec(),
             }
         );
     }
