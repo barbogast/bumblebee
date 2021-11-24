@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
@@ -63,14 +64,28 @@ fn get_directory_content_recursively(dir: String) -> HashSet<String> {
 
 #[derive(Debug)]
 struct Missing {
-    missing_in_dir_a: HashSet<String>,
-    missing_in_dir_b: HashSet<String>,
+    missing_in_dir_a: Vec<String>,
+    missing_in_dir_b: Vec<String>,
+}
+
+// When handling missing directories / files the initial list contains missing directories and each missing file.
+// In this case we only need to know that the directory is missing, so let's filter out the contents.
+fn remove_subdirectories(paths: &Vec<String>) -> Vec<String> {
+    paths
+        .into_iter()
+        .sorted()
+        .coalesce(|a, b| if b.starts_with(a) { Ok(a) } else { Err((a, b)) })
+        .cloned()
+        .collect()
 }
 
 fn analyze(dir_a_content: HashSet<String>, dir_b_content: HashSet<String>) -> Missing {
+    let missing_in_dir_a: Vec<String> = dir_b_content.difference(&dir_a_content).cloned().collect();
+    let missing_in_dir_b: Vec<String> = dir_a_content.difference(&dir_b_content).cloned().collect();
+
     Missing {
-        missing_in_dir_a: dir_b_content.difference(&dir_a_content).cloned().collect(),
-        missing_in_dir_b: dir_a_content.difference(&dir_b_content).cloned().collect(),
+        missing_in_dir_a: remove_subdirectories(&missing_in_dir_a),
+        missing_in_dir_b: remove_subdirectories(&missing_in_dir_b),
     }
 }
 
