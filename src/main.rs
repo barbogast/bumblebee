@@ -2,6 +2,12 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use walkdir::WalkDir;
 
+#[derive(Debug, PartialEq, PartialOrd)]
+struct Missing {
+    missing_in_dir_a: Vec<String>,
+    missing_in_dir_b: Vec<String>,
+}
+
 fn get_directory_content_recursively(dir: String) -> HashSet<String> {
     let mut filenames: HashSet<String> = HashSet::new();
 
@@ -16,12 +22,6 @@ fn get_directory_content_recursively(dir: String) -> HashSet<String> {
     }
 
     filenames
-}
-
-#[derive(Debug, PartialEq, PartialOrd)]
-struct Missing {
-    missing_in_dir_a: Vec<String>,
-    missing_in_dir_b: Vec<String>,
 }
 
 // When handling missing directories / files the initial list contains missing directories and each missing file.
@@ -45,13 +45,6 @@ fn analyze(dir_a_content: HashSet<String>, dir_b_content: HashSet<String>) -> Mi
     }
 }
 
-fn run_test(path: &str) -> Missing {
-    analyze(
-        get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
-        get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
-    )
-}
-
 fn main() {
     let dirA_content =
         get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirA"));
@@ -66,6 +59,13 @@ fn main() {
 
 mod tests {
     use super::*;
+
+    fn run_test(path: &str) -> Missing {
+        analyze(
+            get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
+            get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
+        )
+    }
     #[test]
     fn t_01_test_files_match() {
         assert_eq!(
