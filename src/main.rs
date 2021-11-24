@@ -7,7 +7,7 @@ use std::io::{BufReader, Read};
 use walkdir::WalkDir;
 
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Missing {
+struct StructureCompareResult {
     missing_in_dir_a: Vec<String>,
     missing_in_dir_b: Vec<String>,
 }
@@ -67,13 +67,16 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
     Ok(HEXUPPER.encode(digest.as_ref()))
 }
 
-fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> Missing {
+fn analyze(
+    dir_a_content: &HashSet<String>,
+    dir_b_content: &HashSet<String>,
+) -> StructureCompareResult {
     let missing_in_dir_a: Vec<String> =
         remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect());
     let missing_in_dir_b: Vec<String> =
         remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect());
 
-    Missing {
+    StructureCompareResult {
         missing_in_dir_a,
         missing_in_dir_b,
     }
@@ -136,7 +139,7 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn run_test(path: &str) -> Missing {
+    fn run_test(path: &str) -> StructureCompareResult {
         analyze(
             &get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
             &get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
@@ -146,7 +149,7 @@ mod tests {
     fn t_01_test_files_match() {
         assert_eq!(
             run_test("01_test_files_match"),
-            Missing {
+            StructureCompareResult {
                 missing_in_dir_a: Vec::new(),
                 missing_in_dir_b: Vec::new()
             }
@@ -157,7 +160,7 @@ mod tests {
     fn t_02_dir_a_lacks_file() {
         assert_eq!(
             run_test("02_dirA_lacks_file"),
-            Missing {
+            StructureCompareResult {
                 missing_in_dir_a: [String::from("file2.txt")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
             }
@@ -168,7 +171,7 @@ mod tests {
     fn t_03_dir_b_lacks_file() {
         assert_eq!(
             run_test("03_dirB_lacks_file"),
-            Missing {
+            StructureCompareResult {
                 missing_in_dir_a: [].to_vec(),
                 missing_in_dir_b: [String::from("file1.txt")].to_vec(),
             }
@@ -179,7 +182,7 @@ mod tests {
     fn t_04_dir_a_lacks_sub_directory() {
         assert_eq!(
             run_test("04_dirA_lacks_sub_directory"),
-            Missing {
+            StructureCompareResult {
                 missing_in_dir_a: [String::from("subdir2")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
             }
@@ -190,7 +193,7 @@ mod tests {
     fn t_05_dir_a_lacks_file_in_sub_directory() {
         assert_eq!(
             run_test("05_dirA_lacks_file_in_sub_directory"),
-            Missing {
+            StructureCompareResult {
                 missing_in_dir_a: [String::from("subdir2/file2.txt")].to_vec(),
                 missing_in_dir_b: [].to_vec(),
             }
