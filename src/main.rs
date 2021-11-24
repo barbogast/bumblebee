@@ -46,12 +46,12 @@ fn analyze(dir_a_content: HashSet<String>, dir_b_content: HashSet<String>) -> Mi
 }
 
 fn main() {
-    let dirA_content =
+    let dir_a_content =
         get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirA"));
-    let dirB_content =
+    let dir_b_content =
         get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirB"));
 
-    let result = analyze(dirA_content, dirB_content);
+    let result = analyze(dir_a_content, dir_b_content);
     dbg!("result 02", result);
 }
 
@@ -78,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn t_02_dirA_lacks_file() {
+    fn t_02_dir_a_lacks_file() {
         assert_eq!(
             run_test("02_dirA_lacks_file"),
             Missing {
@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn t_03_dirB_lacks_file() {
+    fn t_03_dir_b_lacks_file() {
         assert_eq!(
             run_test("03_dirB_lacks_file"),
             Missing {
@@ -100,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn t_04_dirA_lacks_sub_directory() {
+    fn t_04_dir_a_lacks_sub_directory() {
         assert_eq!(
             run_test("04_dirA_lacks_sub_directory"),
             Missing {
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn t_05_dirA_lacks_file_in_sub_directory() {
+    fn t_05_dir_a_lacks_file_in_sub_directory() {
         assert_eq!(
             run_test("05_dirA_lacks_file_in_sub_directory"),
             Missing {
