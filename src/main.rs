@@ -1,11 +1,21 @@
+use data_encoding::HEXUPPER;
 use itertools::Itertools;
+use ring::digest::{Context, Digest, SHA256};
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use walkdir::WalkDir;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Missing {
     missing_in_dir_a: Vec<String>,
     missing_in_dir_b: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+struct ContentCompareResult {
+    differing_content: Vec<String>,
+    file_and_directory: Vec<String>,
 }
 
 fn get_directory_content_recursively(dir: String) -> HashSet<String> {
@@ -35,24 +45,90 @@ fn remove_subdirectories(paths: &Vec<String>) -> Vec<String> {
         .collect()
 }
 
-fn analyze(dir_a_content: HashSet<String>, dir_b_content: HashSet<String>) -> Missing {
-    let missing_in_dir_a: Vec<String> = dir_b_content.difference(&dir_a_content).cloned().collect();
-    let missing_in_dir_b: Vec<String> = dir_a_content.difference(&dir_b_content).cloned().collect();
+fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, std::io::Error> {
+    let mut context = Context::new(&SHA256);
+    let mut buffer = [0; 1024];
+
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        context.update(&buffer[..count]);
+    }
+
+    Ok(context.finish())
+}
+
+fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, std::io::Error> {
+    let input = File::open(path)?;
+    let reader = BufReader::new(input);
+    let digest = sha256_digest(reader)?;
+    Ok(HEXUPPER.encode(digest.as_ref()))
+}
+
+fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> Missing {
+    let missing_in_dir_a: Vec<String> =
+        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect());
+    let missing_in_dir_b: Vec<String> =
+        remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect());
 
     Missing {
-        missing_in_dir_a: remove_subdirectories(&missing_in_dir_a),
-        missing_in_dir_b: remove_subdirectories(&missing_in_dir_b),
+        missing_in_dir_a,
+        missing_in_dir_b,
     }
+}
+
+fn compare_file_contents(
+    dir_a_content: HashSet<String>,
+    dir_b_content: HashSet<String>,
+    dir_a_path: &String,
+    dir_b_path: &String,
+) -> Result<ContentCompareResult, std::io::Error> {
+    let mut differing_content: Vec<String> = Vec::new();
+    let mut file_and_directory: Vec<String> = Vec::new();
+
+    let present_in_both = dir_a_content.intersection(&dir_b_content);
+    for path in present_in_both {
+        let path_a = std::path::Path::new(&dir_a_path).join(path);
+        let path_b = std::path::Path::new(&dir_b_path).join(path);
+        if path_a.is_file() && path_b.is_file() {
+            let hash_a = get_file_content_hash(path_a)?;
+            let hash_b = get_file_content_hash(path_b)?;
+            if hash_a != hash_b {
+                differing_content.push(path.clone());
+            }
+        } else if !(path_a.is_dir() && path_b.is_dir()) {
+            file_and_directory.push(path.clone());
+        }
+    }
+
+    Ok(ContentCompareResult {
+        differing_content,
+        file_and_directory,
+    })
 }
 
 fn main() {
     let dir_a_content =
-        get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirA"));
+        get_directory_content_recursively(String::from("./test/08_file_and_directory/dirA"));
     let dir_b_content =
-        get_directory_content_recursively(String::from("./test/02_dirA_lacks_file/dirB"));
+        get_directory_content_recursively(String::from("./test/08_file_and_directory/dirB"));
 
-    let result = analyze(dir_a_content, dir_b_content);
-    dbg!("result 02", result);
+    let result = analyze(&dir_a_content, &dir_b_content);
+    let differing = match compare_file_contents(
+        dir_a_content,
+        dir_b_content,
+        &String::from("./test/08_file_and_directory/dirA"),
+        &String::from("./test/08_file_and_directory/dirB"),
+    ) {
+        Err(why) => {
+            println!("! {:?}", why);
+            return;
+        }
+        Ok(res) => res,
+    };
+    dbg!("result 02", result, differing);
 }
 
 #[cfg(test)]
@@ -62,8 +138,8 @@ mod tests {
 
     fn run_test(path: &str) -> Missing {
         analyze(
-            get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
-            get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
+            &get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
+            &get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
         )
     }
     #[test]
