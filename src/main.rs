@@ -5,14 +5,6 @@ use std::io;
 use std::path::Path;
 use walkdir::WalkDir;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
-
 fn read_directories() -> io::Result<(
     std::vec::Vec<std::path::PathBuf>,
     std::vec::Vec<std::path::PathBuf>,
@@ -62,7 +54,7 @@ fn get_directory_content_recursively(dir: String) -> HashSet<String> {
     filenames
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 struct Missing {
     missing_in_dir_a: Vec<String>,
     missing_in_dir_b: Vec<String>,
@@ -87,6 +79,13 @@ fn analyze(dir_a_content: HashSet<String>, dir_b_content: HashSet<String>) -> Mi
         missing_in_dir_a: remove_subdirectories(&missing_in_dir_a),
         missing_in_dir_b: remove_subdirectories(&missing_in_dir_b),
     }
+}
+
+fn run_test(path: &str) -> Missing {
+    analyze(
+        get_directory_content_recursively(String::from("./test/") + path + "/dirA"),
+        get_directory_content_recursively(String::from("./test/") + path + "/dirB"),
+    )
 }
 
 fn main() {
@@ -150,4 +149,64 @@ fn main() {
     //         }
     //     }
     // }
+}
+
+#[cfg(test)]
+
+mod tests {
+    use super::*;
+    #[test]
+    fn t_01_test_files_match() {
+        assert_eq!(
+            run_test("01_test_files_match"),
+            Missing {
+                missing_in_dir_a: Vec::new(),
+                missing_in_dir_b: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn t_02_dirA_lacks_file() {
+        assert_eq!(
+            run_test("02_dirA_lacks_file"),
+            Missing {
+                missing_in_dir_a: [String::from("file2.txt")].to_vec(),
+                missing_in_dir_b: [].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_03_dirB_lacks_file() {
+        assert_eq!(
+            run_test("03_dirB_lacks_file"),
+            Missing {
+                missing_in_dir_a: [].to_vec(),
+                missing_in_dir_b: [String::from("file1.txt")].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_04_dirA_lacks_sub_directory() {
+        assert_eq!(
+            run_test("04_dirA_lacks_sub_directory"),
+            Missing {
+                missing_in_dir_a: [String::from("subdir2")].to_vec(),
+                missing_in_dir_b: [].to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn t_05_dirA_lacks_file_in_sub_directory() {
+        assert_eq!(
+            run_test("05_dirA_lacks_file_in_sub_directory"),
+            Missing {
+                missing_in_dir_a: [String::from("subdir2/file2.txt")].to_vec(),
+                missing_in_dir_b: [].to_vec(),
+            }
+        );
+    }
 }
