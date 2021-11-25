@@ -129,24 +129,6 @@ fn analyze(
     }
 }
 
-fn main_old() {
-    let dir_a_content =
-        get_directory_content_recursively(&String::from("./test/08_file_and_directory/dirA"));
-    let dir_b_content =
-        get_directory_content_recursively(&String::from("./test/08_file_and_directory/dirB"));
-
-    let result = analyze(&dir_a_content, &dir_b_content);
-    dbg!("result 02", result);
-
-    let content_compare_result = compare_file_contents(
-        &dir_a_content,
-        &dir_b_content,
-        &String::from("./test/08_file_and_directory/dirA"),
-        &String::from("./test/08_file_and_directory/dirB"),
-    );
-    dbg!("result 02", content_compare_result);
-}
-
 #[tauri::command]
 fn compare(path_a: String, path_b: String) -> (StructureCompareResult, ContentCompareResult) {
   println!("received2");
