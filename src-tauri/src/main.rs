@@ -1,3 +1,8 @@
+#![cfg_attr(
+  all(not(debug_assertions), target_os = "windows"),
+  windows_subsystem = "windows"
+)]
+
 use data_encoding::HEXUPPER;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
@@ -124,7 +129,7 @@ fn analyze(
     }
 }
 
-fn main() {
+fn main_old() {
     let dir_a_content =
         get_directory_content_recursively(&String::from("./test/08_file_and_directory/dirA"));
     let dir_b_content =
@@ -140,6 +145,12 @@ fn main() {
         &String::from("./test/08_file_and_directory/dirB"),
     );
     dbg!("result 02", content_compare_result);
+}
+
+fn main() {
+  tauri::Builder::default()
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
 }
 
 #[cfg(test)]
