@@ -1,40 +1,48 @@
-import React from 'react'
-import logo from './logo.svg'
-import tauriCircles from './tauri.svg'
-import tauriWord from './wordmark.svg'
-import './App.css'
+import { useState } from 'react';
+import './App.css';
+import { open } from '@tauri-apps/api/dialog';
+import { invoke } from '@tauri-apps/api/tauri';
 
 function App() {
+  const [pathA, setPathA] = useState<string>();
+  const [pathB, setPathB] = useState<string>();
   return (
-    <div className="App">
-      <header className="App-header">
-        <div className="inline-logo">
-          <img src={tauriCircles} className="App-logo rotate" alt="logo" />
-          <img src={tauriWord} className="App-logo smaller" alt="logo" />
-        </div>
-        <a
-          className="App-link"
-          href="https://tauri.studio"
-          target="_blank"
-          rel="noopener noreferrer"
+    <div className='App'>
+      <header className='App-header'>
+        {pathA}
+        <button
+          onClick={() =>
+            open({ directory: true })
+              .then((path) => setPathA(path as string))
+              .catch(console.error)
+          }
         >
-          Learn Tauri
-        </a>
-        <img src={logo} className="App-logo rotate" alt="logo" />
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
+          Set dir A
+        </button>
+        {pathB}
+        <button
+          onClick={() =>
+            open({ directory: true })
+              .then((path) => setPathB(path as string))
+              .catch(console.error)
+          }
         >
-          Learn React
-        </a>
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
+          Set dir B
+        </button>
+        <button
+          onClick={() => {
+            console.log('invoke');
+
+            invoke('compare', { pathA, pathB })
+              .then((message) => console.log(message))
+              .catch((e) => console.error(e));
+          }}
+        >
+          Compare
+        </button>
       </header>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

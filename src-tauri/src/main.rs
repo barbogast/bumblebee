@@ -11,13 +11,13 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use walkdir::WalkDir;
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
 struct StructureCompareResult {
     missing_in_dir_a: Vec<String>,
     missing_in_dir_b: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
 struct ContentCompareResult {
     differing_content: Vec<String>,
     file_and_directory: Vec<String>,
@@ -147,8 +147,28 @@ fn main_old() {
     dbg!("result 02", content_compare_result);
 }
 
+#[tauri::command]
+fn compare(path_a: String, path_b: String) -> (StructureCompareResult, ContentCompareResult) {
+  println!("received2");
+
+  let dir_a_content = get_directory_content_recursively(&path_a);
+  let dir_b_content = get_directory_content_recursively(&path_b);
+
+  let result = analyze(&dir_a_content, &dir_b_content);
+
+  let content_compare_result = compare_file_contents(
+    &dir_a_content,
+    &dir_b_content,
+    &String::from("./test/08_file_and_directory/dirA"),
+    &String::from("./test/08_file_and_directory/dirB"),
+);
+
+  (result, content_compare_result).into()
+}
+
 fn main() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![compare])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
