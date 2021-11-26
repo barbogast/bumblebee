@@ -17,10 +17,25 @@ struct StructureCompareResult {
     missing_in_dir_b: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+enum EntryType {
+  Directory,
+  File,
+  // Link, // TODO
+  Unknown,
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+struct EntryTypeMismatch {
+  path: String,
+  type_in_dir_a: EntryType,
+  type_in_dir_b: EntryType
+}
+
 #[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
 struct ContentCompareResult {
     differing_content: Vec<String>,
-    file_and_directory: Vec<String>,
+    file_and_directory: Vec<EntryTypeMismatch>,
 }
 
 fn get_directory_content_recursively(dir: &String) -> HashSet<String> {
@@ -72,6 +87,17 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
     Ok(HEXUPPER.encode(digest.as_ref()))
 }
 
+fn get_entry_type(path: &std::path::Path) -> EntryType {
+  dbg!(path, path.is_dir());
+  if path.is_dir() { EntryType::Directory }
+  else if path.is_file() { EntryType::File }
+
+  // TODO: is_symlink() is only allowed in nightly...
+  // else if path.is_symlink() { EntryType::Link }
+
+  else { EntryType::Unknown }
+}
+
 fn compare_file_contents(
     dir_a_content: &HashSet<String>,
     dir_b_content: &HashSet<String>,
@@ -79,7 +105,7 @@ fn compare_file_contents(
     dir_b_path: &String,
 ) -> ContentCompareResult {
     let mut differing_content: Vec<String> = Vec::new();
-    let mut file_and_directory: Vec<String> = Vec::new();
+    let mut file_and_directory: Vec<EntryTypeMismatch> = Vec::new();
 
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
@@ -104,7 +130,12 @@ fn compare_file_contents(
                 differing_content.push(path.clone());
             }
         } else if !(path_a.is_dir() && path_b.is_dir()) {
-            file_and_directory.push(path.clone());
+            let entry_type = EntryTypeMismatch {
+              path: path.clone(),
+              type_in_dir_a: get_entry_type(&path_a),
+              type_in_dir_b: get_entry_type(&path_b)
+            };
+            file_and_directory.push(entry_type);
         }
     }
 
@@ -259,7 +290,7 @@ mod tests {
             call_content_compare("08_file_and_directory"),
             ContentCompareResult {
                 differing_content: [].to_vec(),
-                file_and_directory: [String::from("file1.txt")].to_vec(),
+                file_and_directory: [EntryTypeMismatch { path: String::from("file1.txt"), type_in_dir_a: EntryType::File, type_in_dir_b: EntryType::Directory}].to_vec(),
             }
         );
     }

@@ -5,12 +5,16 @@ import { open } from '@tauri-apps/api/dialog';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ColumnsType } from 'antd/es/table';
 
+type EntryType = 'Directory' | 'File' | 'Link' | 'Unknown';
 type Result = [
   {
     missing_in_dir_a: string[];
     missing_in_dir_b: string[];
   },
-  { differing_content: string[]; file_and_directory: string[] }
+  {
+    differing_content: string[];
+    file_and_directory: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
+  }
 ];
 
 type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'fileAndDirectory';
@@ -94,12 +98,12 @@ function App() {
     : [];
 
   const fileAndDirectory: TableData[] = result
-    ? result[1].file_and_directory.map((path) => ({
-        key: path,
-        path,
+    ? result[1].file_and_directory.map((mismatch) => ({
+        key: mismatch.path,
+        path: mismatch.path,
         reason: 'fileAndDirectory',
-        dirA: ' File or directory',
-        dirB: 'File or direcotry',
+        dirA: mismatch.type_in_dir_a,
+        dirB: mismatch.type_in_dir_b,
       }))
     : [];
 
