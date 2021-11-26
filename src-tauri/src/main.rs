@@ -1,6 +1,6 @@
 #![cfg_attr(
-  all(not(debug_assertions), target_os = "windows"),
-  windows_subsystem = "windows"
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
 )]
 
 use data_encoding::HEXUPPER;
@@ -19,17 +19,17 @@ struct StructureCompareResult {
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
 enum EntryType {
-  Directory,
-  File,
-  // Link, // TODO
-  Unknown,
+    Directory,
+    File,
+    // Link, // TODO
+    Unknown,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
 struct EntryTypeMismatch {
-  path: String,
-  type_in_dir_a: EntryType,
-  type_in_dir_b: EntryType
+    path: String,
+    type_in_dir_a: EntryType,
+    type_in_dir_b: EntryType,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
@@ -88,14 +88,17 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
 }
 
 fn get_entry_type(path: &std::path::Path) -> EntryType {
-  dbg!(path, path.is_dir());
-  if path.is_dir() { EntryType::Directory }
-  else if path.is_file() { EntryType::File }
-
-  // TODO: is_symlink() is only allowed in nightly...
-  // else if path.is_symlink() { EntryType::Link }
-
-  else { EntryType::Unknown }
+    dbg!(path, path.is_dir());
+    if path.is_dir() {
+        EntryType::Directory
+    } else if path.is_file() {
+        EntryType::File
+    }
+    // TODO: is_symlink() is only allowed in nightly...
+    // else if path.is_symlink() { EntryType::Link }
+    else {
+        EntryType::Unknown
+    }
 }
 
 fn compare_file_contents(
@@ -131,9 +134,9 @@ fn compare_file_contents(
             }
         } else if !(path_a.is_dir() && path_b.is_dir()) {
             let entry_type = EntryTypeMismatch {
-              path: path.clone(),
-              type_in_dir_a: get_entry_type(&path_a),
-              type_in_dir_b: get_entry_type(&path_b)
+                path: path.clone(),
+                type_in_dir_a: get_entry_type(&path_a),
+                type_in_dir_b: get_entry_type(&path_b),
             };
             file_and_directory.push(entry_type);
         }
@@ -162,28 +165,24 @@ fn analyze(
 
 #[tauri::command]
 fn compare(path_a: String, path_b: String) -> (StructureCompareResult, ContentCompareResult) {
-  println!("received2");
+    println!("received2");
 
-  let dir_a_content = get_directory_content_recursively(&path_a);
-  let dir_b_content = get_directory_content_recursively(&path_b);
+    let dir_a_content = get_directory_content_recursively(&path_a);
+    let dir_b_content = get_directory_content_recursively(&path_b);
 
-  let result = analyze(&dir_a_content, &dir_b_content);
+    let result = analyze(&dir_a_content, &dir_b_content);
 
-  let content_compare_result = compare_file_contents(
-    &dir_a_content,
-    &dir_b_content,
-    &path_a,
-    &path_b,
-);
+    let content_compare_result =
+        compare_file_contents(&dir_a_content, &dir_b_content, &path_a, &path_b);
 
-  (result, content_compare_result).into()
+    (result, content_compare_result).into()
 }
 
 fn main() {
-  tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![compare])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![compare])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
 #[cfg(test)]
@@ -290,7 +289,12 @@ mod tests {
             call_content_compare("08_file_and_directory"),
             ContentCompareResult {
                 differing_content: [].to_vec(),
-                file_and_directory: [EntryTypeMismatch { path: String::from("file1.txt"), type_in_dir_a: EntryType::File, type_in_dir_b: EntryType::Directory}].to_vec(),
+                file_and_directory: [EntryTypeMismatch {
+                    path: String::from("file1.txt"),
+                    type_in_dir_a: EntryType::File,
+                    type_in_dir_b: EntryType::Directory
+                }]
+                .to_vec(),
             }
         );
     }
