@@ -41,33 +41,31 @@ const renderTableCell = (text: string, record: TableData) => {
   ) : null;
 };
 
+const columns: ColumnsType<TableData> = [
+  {
+    title: 'Path',
+    dataIndex: 'path',
+    key: 'path',
+  },
+  {
+    title: 'A',
+    dataIndex: 'dirA',
+    key: 'dirA',
+    render: renderTableCell,
+  },
+  {
+    title: 'B',
+    dataIndex: 'dirB',
+    key: 'dirB',
+    render: renderTableCell,
+  },
+];
+
 function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [pathA, setPathA] = useState<string>();
   const [pathB, setPathB] = useState<string>();
   const [result, setResult] = useState<Result | void>();
-
-  const columns: ColumnsType<TableData> = result
-    ? [
-        {
-          title: 'Path',
-          dataIndex: 'path',
-          key: 'path',
-        },
-        {
-          title: 'A',
-          dataIndex: 'dirA',
-          key: 'dirA',
-          render: renderTableCell,
-        },
-        {
-          title: 'B',
-          dataIndex: 'dirB',
-          key: 'dirB',
-          render: renderTableCell,
-        },
-      ]
-    : [];
 
   const missingInDirA: TableData[] = result
     ? result[0].missing_in_dir_a.map((path) => ({
