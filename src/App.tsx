@@ -123,41 +123,45 @@ function App() {
         <Header className='site-layout-background' style={{ padding: 0 }} />
         <Content style={{ margin: '0 16px' }}>
           <div className='site-layout-background' style={{ padding: 24, minHeight: 360 }}>
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'row', marginBottom: 10 }}>
               <button
                 onClick={() =>
                   open({ directory: true })
                     .then((path) => setPathA(path as string))
                     .catch(console.error)
                 }
+                style={{ marginRight: 10 }}
               >
-                Set dir A
+                Set directory A
               </button>
-              <input value={pathA} onChange={(e) => setPathA(e.target.value)} />
+              <input value={pathA} onChange={(e) => setPathA(e.target.value)} style={{ flex: 1 }} />
             </div>
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'row', marginBottom: 10 }}>
               <button
                 onClick={() =>
                   open({ directory: true })
                     .then((path) => setPathB(path as string))
                     .catch(console.error)
                 }
+                style={{ marginRight: 10 }}
               >
-                Set dir B
+                Set directory B
               </button>
-              <input value={pathB} onChange={(e) => setPathB(e.target.value)} />
+              <input value={pathB} onChange={(e) => setPathB(e.target.value)} style={{ flex: 1 }} />
             </div>
-            <button
-              onClick={() => {
-                console.log('invoke');
+            <div style={{ marginBottom: 10 }}>
+              <button
+                onClick={() => {
+                  console.log('invoke');
 
-                invoke('compare', { pathA, pathB })
-                  .then((message) => setResult(message as Result))
-                  .catch((e) => console.error(e));
-              }}
-            >
-              Compare
-            </button>
+                  invoke('compare', { pathA, pathB })
+                    .then((message) => setResult(message as Result))
+                    .catch((e) => console.error(e));
+                }}
+              >
+                Compare
+              </button>
+            </div>
             {result && <Table dataSource={tableData} columns={columns} />}
           </div>
         </Content>
