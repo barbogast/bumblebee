@@ -141,8 +141,8 @@ fn compare(path_a: String, path_b: String) -> (StructureCompareResult, ContentCo
   let content_compare_result = compare_file_contents(
     &dir_a_content,
     &dir_b_content,
-    &String::from("./test/08_file_and_directory/dirA"),
-    &String::from("./test/08_file_and_directory/dirB"),
+    &path_a,
+    &path_b,
 );
 
   (result, content_compare_result).into()
