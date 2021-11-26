@@ -13,7 +13,7 @@ type Result = [
   },
   {
     differing_content: string[];
-    file_and_directory: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
+    type_mismatch: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
   },
   {
     path: string;
@@ -21,7 +21,7 @@ type Result = [
   }[]
 ];
 
-type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'fileAndDirectory' | 'error';
+type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'typeMismatch' | 'error';
 
 type TableData = {
   key: string;
@@ -37,7 +37,7 @@ const renderTableCell = (text: string, record: TableData) => {
     missingInA: 'error',
     missingInB: 'error',
     differingContent: 'warning',
-    fileAndDirectory: 'warning',
+    typeMismatch: 'warning',
   };
   return text ? (
     <Alert type={classMap[record.reason]} message={text}>
@@ -109,11 +109,11 @@ function App() {
       }))
     : [];
 
-  const fileAndDirectory: TableData[] = result
-    ? result[1].file_and_directory.map((mismatch) => ({
+  const typeMismatch: TableData[] = result
+    ? result[1].type_mismatch.map((mismatch) => ({
         key: mismatch.path,
         path: mismatch.path,
-        reason: 'fileAndDirectory',
+        reason: 'typeMismatch',
         dirA: mismatch.type_in_dir_a,
         dirB: mismatch.type_in_dir_b,
       }))
@@ -123,7 +123,7 @@ function App() {
     .concat(missingInDirA)
     .concat(missingInDirB)
     .concat(differintContent)
-    .concat(fileAndDirectory);
+    .concat(typeMismatch);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

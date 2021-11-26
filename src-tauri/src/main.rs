@@ -35,7 +35,7 @@ struct EntryTypeMismatch {
 #[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
 struct ContentCompareResult {
     differing_content: Vec<String>,
-    file_and_directory: Vec<EntryTypeMismatch>,
+    type_mismatch: Vec<EntryTypeMismatch>,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
@@ -135,7 +135,7 @@ fn compare_file_contents(
     errors: &mut Vec<CompareError>,
 ) -> ContentCompareResult {
     let mut differing_content: Vec<String> = Vec::new();
-    let mut file_and_directory: Vec<EntryTypeMismatch> = Vec::new();
+    let mut type_mismatch: Vec<EntryTypeMismatch> = Vec::new();
 
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
@@ -171,13 +171,13 @@ fn compare_file_contents(
                 type_in_dir_a: get_entry_type(&path_a),
                 type_in_dir_b: get_entry_type(&path_b),
             };
-            file_and_directory.push(entry_type);
+            type_mismatch.push(entry_type);
         }
     }
 
     ContentCompareResult {
         differing_content,
-        file_and_directory,
+        type_mismatch,
     }
 }
 
@@ -304,7 +304,7 @@ mod tests {
             result,
             (ContentCompareResult {
                 differing_content: [].to_vec(),
-                file_and_directory: [].to_vec(),
+                type_mismatch: [].to_vec(),
             })
         );
         assert_eq!(
@@ -394,7 +394,7 @@ mod tests {
             (
                 ContentCompareResult {
                     differing_content: [String::from("file1.txt")].to_vec(),
-                    file_and_directory: [].to_vec(),
+                    type_mismatch: [].to_vec(),
                 },
                 [].to_vec()
             )
@@ -408,7 +408,7 @@ mod tests {
             (
                 ContentCompareResult {
                     differing_content: [String::from("file1.jpeg")].to_vec(),
-                    file_and_directory: [].to_vec(),
+                    type_mismatch: [].to_vec(),
                 },
                 [].to_vec()
             )
@@ -416,13 +416,13 @@ mod tests {
     }
 
     #[test]
-    fn t_08_file_and_directory() {
+    fn t_08_type_mismatch() {
         assert_eq!(
-            call_content_compare("08_file_and_directory"),
+            call_content_compare("08_type_mismatch"),
             (
                 ContentCompareResult {
                     differing_content: [].to_vec(),
-                    file_and_directory: [EntryTypeMismatch {
+                    type_mismatch: [EntryTypeMismatch {
                         path: String::from("file1.txt"),
                         type_in_dir_a: EntryType::File,
                         type_in_dir_b: EntryType::Directory
