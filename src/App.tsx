@@ -63,8 +63,8 @@ const columns: ColumnsType<TableData> = [
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);
-  const [pathA, setPathA] = useState<string>();
-  const [pathB, setPathB] = useState<string>();
+  const [pathA, setPathA] = useState<string>('');
+  const [pathB, setPathB] = useState<string>('');
   const [result, setResult] = useState<Result | void>();
 
   const missingInDirA: TableData[] = result
