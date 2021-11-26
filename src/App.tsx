@@ -19,6 +19,14 @@ type CompareResult = (
       message: string;
     }
   | {
+      type: 'MissingInDirA';
+      path: string;
+    }
+  | {
+      type: 'MissingInDirB';
+      path: string;
+    }
+  | {
       type: 'DifferingContent';
       path: string;
     }
@@ -30,13 +38,7 @@ type CompareResult = (
     }
 )[];
 
-type Result = [
-  {
-    missing_in_dir_a: string[];
-    missing_in_dir_b: string[];
-  },
-  CompareResult
-];
+type Result = CompareResult;
 
 // TODO: This hopefully can be removed, wouldn't want to maintain it in addition to CompareResult
 type Reason =
@@ -47,6 +49,8 @@ type Reason =
   | 'error'
   | 'CouldNotReadDirectory'
   | 'CouldNotCalculateHash'
+  | 'MissingInDirA'
+  | 'MissingInDirB'
   | 'DifferingContent'
   | 'TypeMismatch';
 
@@ -66,6 +70,8 @@ const renderTableCell = (text: string, record: TableData) => {
     missingInB: 'error',
     differingContent: 'warning',
     typeMismatch: 'warning',
+    MissingInDirA: 'error',
+    MissingInDirB: 'error',
     CouldNotReadDirectory: 'error',
     CouldNotCalculateHash: 'error',
     DifferingContent: 'warning',
@@ -106,7 +112,7 @@ function App() {
   console.log(result);
 
   const errors: TableData[] = result
-    ? result[1].map((res) => {
+    ? result.map((res) => {
         const { type } = res;
         switch (type) {
           case 'CouldNotReadDirectory':
@@ -116,6 +122,22 @@ function App() {
               path: res.path,
               reason: res.type, // TODO: Rename "reason" to "type"
               dirA: res.message,
+            };
+          }
+          case 'MissingInDirA': {
+            return {
+              key: res.path,
+              path: res.path,
+              reason: 'missingInA',
+              dirA: 'File  missing',
+            };
+          }
+          case 'MissingInDirB': {
+            return {
+              key: res.path,
+              path: res.path,
+              reason: 'missingInB',
+              dirA: 'File missing',
             };
           }
           case 'DifferingContent': {
@@ -145,25 +167,7 @@ function App() {
       })
     : [];
 
-  const missingInDirA: TableData[] = result
-    ? result[0].missing_in_dir_a.map((path) => ({
-        key: path,
-        path,
-        reason: 'missingInA',
-        dirA: 'File missing',
-      }))
-    : [];
-
-  const missingInDirB: TableData[] = result
-    ? result[0].missing_in_dir_b.map((path) => ({
-        key: path,
-        path,
-        reason: 'missingInB',
-        dirB: 'File missing',
-      }))
-    : [];
-
-  const tableData = errors.concat(missingInDirA).concat(missingInDirB);
+  const tableData = errors;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

@@ -1,3 +1,6 @@
+// TODO
+// Replace to_vec() and Vec::new() with vec!
+
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
@@ -10,12 +13,6 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use walkdir::WalkDir;
-
-#[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
-struct StructureCompareResult {
-    missing_in_dir_a: Vec<String>,
-    missing_in_dir_b: Vec<String>,
-}
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
 enum EntryType {
@@ -48,6 +45,8 @@ struct ErrorInfo {
 enum CompareResult {
     CouldNotReadDirectory(ErrorInfo),
     CouldNotCalculateHash(ErrorInfo),
+    MissingInDirA(EntryInfo),
+    MissingInDirB(EntryInfo),
     DifferingContent(EntryInfo),
     TypeMismatch(EntryTypeMismatch),
 }
@@ -177,23 +176,28 @@ fn compare_file_contents(
     }
 }
 
-fn analyze(
-    dir_a_content: &HashSet<String>,
-    dir_b_content: &HashSet<String>,
-) -> StructureCompareResult {
-    let missing_in_dir_a: Vec<String> =
-        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect());
-    let missing_in_dir_b: Vec<String> =
-        remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect());
+fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> Vec<CompareResult> {
+    let mut missing_in_dir_a: Vec<CompareResult> =
+    // TODO: make remove_subdirectories operate on the iterator
+        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect())
+            .iter()
+            .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }))
+            .collect();
 
-    StructureCompareResult {
-        missing_in_dir_a,
-        missing_in_dir_b,
-    }
+    let missing_in_dir_b: Vec<CompareResult> =
+    // TODO: make remove_subdirectories operate on the iterator
+          remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect())
+              .iter()
+              .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }))
+              .collect();
+
+    // TODO This is also somewhat strange, why do we continue with missing_in_dir_a?
+    missing_in_dir_a.extend(missing_in_dir_b);
+    missing_in_dir_a
 }
 
 #[tauri::command]
-fn compare(path_a: String, path_b: String) -> (StructureCompareResult, Vec<CompareResult>) {
+fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     println!("received2");
 
     let mut errors: Vec<CompareResult> = Vec::new();
@@ -202,6 +206,7 @@ fn compare(path_a: String, path_b: String) -> (StructureCompareResult, Vec<Compa
     let dir_b_content = get_directory_content_recursively(&path_b, &mut errors);
 
     let result = analyze(&dir_a_content, &dir_b_content);
+    errors.extend(result);
 
     compare_file_contents(
         &dir_a_content,
@@ -211,7 +216,7 @@ fn compare(path_a: String, path_b: String) -> (StructureCompareResult, Vec<Compa
         &mut errors,
     );
 
-    (result, errors).into()
+    errors.into()
 }
 
 fn main() {
@@ -226,7 +231,8 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn call_structure_compare(path: &str) -> (StructureCompareResult, Vec<CompareResult>) {
+    fn call_structure_compare(path: &str) -> Vec<CompareResult> {
+        // TODO: Rename "errors" to "result"
         let mut errors: Vec<CompareResult> = Vec::new();
         let result = analyze(
             &get_directory_content_recursively(
@@ -238,7 +244,8 @@ mod tests {
                 &mut errors,
             ),
         );
-        (result, errors)
+        errors.extend(result);
+        errors
     }
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
         let path_a = String::from("./test/") + path + "/dirA";
@@ -258,11 +265,6 @@ mod tests {
     fn compare_invalid_directory() {
         assert_eq!(
             call_structure_compare("i_do_not_exist"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [].to_vec(),
-                    missing_in_dir_b: [].to_vec()
-                },
                 [
                   CompareResult::CouldNotReadDirectory(ErrorInfo {
                         path: String::from("./test/i_do_not_exist/dirA"),
@@ -274,7 +276,6 @@ mod tests {
                     })
                 ]
                 .to_vec(),
-            )
         );
     }
 
@@ -301,29 +302,17 @@ mod tests {
 
     #[test]
     fn t_01_test_files_match() {
-        assert_eq!(
-            call_structure_compare("01_test_files_match"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [].to_vec(),
-                    missing_in_dir_b: [].to_vec()
-                },
-                Vec::new()
-            )
-        );
+        assert_eq!(call_structure_compare("01_test_files_match"), Vec::new());
     }
 
     #[test]
     fn t_02_dir_a_lacks_file() {
         assert_eq!(
             call_structure_compare("02_dirA_lacks_file"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [String::from("file2.txt")].to_vec(),
-                    missing_in_dir_b: [].to_vec(),
-                },
-                [].to_vec()
-            )
+            [CompareResult::MissingInDirA(EntryInfo {
+                path: String::from("file2.txt")
+            })]
+            .to_vec()
         );
     }
 
@@ -331,13 +320,10 @@ mod tests {
     fn t_03_dir_b_lacks_file() {
         assert_eq!(
             call_structure_compare("03_dirB_lacks_file"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [].to_vec(),
-                    missing_in_dir_b: [String::from("file1.txt")].to_vec(),
-                },
-                [].to_vec()
-            )
+            [CompareResult::MissingInDirB(EntryInfo {
+                path: String::from("file1.txt")
+            })]
+            .to_vec()
         );
     }
 
@@ -345,13 +331,10 @@ mod tests {
     fn t_04_dir_a_lacks_sub_directory() {
         assert_eq!(
             call_structure_compare("04_dirA_lacks_sub_directory"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [String::from("subdir2")].to_vec(),
-                    missing_in_dir_b: [].to_vec(),
-                },
-                [].to_vec()
-            )
+            [CompareResult::MissingInDirA(EntryInfo {
+                path: String::from("subdir2")
+            })]
+            .to_vec()
         );
     }
 
@@ -359,13 +342,10 @@ mod tests {
     fn t_05_dir_a_lacks_file_in_sub_directory() {
         assert_eq!(
             call_structure_compare("05_dirA_lacks_file_in_sub_directory"),
-            (
-                StructureCompareResult {
-                    missing_in_dir_a: [String::from("subdir2/file2.txt")].to_vec(),
-                    missing_in_dir_b: [].to_vec(),
-                },
-                [].to_vec()
-            )
+            [CompareResult::MissingInDirA(EntryInfo {
+                path: String::from("subdir2/file2.txt")
+            })]
+            .to_vec()
         );
     }
 
