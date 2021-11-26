@@ -14,10 +14,14 @@ type Result = [
   {
     differing_content: string[];
     file_and_directory: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
-  }
+  },
+  {
+    path: string;
+    message: string;
+  }[]
 ];
 
-type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'fileAndDirectory';
+type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'fileAndDirectory' | 'error';
 
 type TableData = {
   key: string;
@@ -29,6 +33,7 @@ const { Header, Content, Footer, Sider } = Layout;
 
 const renderTableCell = (text: string, record: TableData) => {
   const classMap: { [key in Reason]: 'warning' | 'error' } = {
+    error: 'error',
     missingInA: 'error',
     missingInB: 'error',
     differingContent: 'warning',
@@ -66,6 +71,15 @@ function App() {
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
   const [result, setResult] = useState<Result | void>();
+
+  const errors: TableData[] = result
+    ? result[2].map((error) => ({
+        key: error.path,
+        path: error.path,
+        reason: 'error',
+        dirA: error.message,
+      }))
+    : [];
 
   const missingInDirA: TableData[] = result
     ? result[0].missing_in_dir_a.map((path) => ({
@@ -105,7 +119,8 @@ function App() {
       }))
     : [];
 
-  const tableData = missingInDirA
+  const tableData = errors
+    .concat(missingInDirA)
     .concat(missingInDirB)
     .concat(differintContent)
     .concat(fileAndDirectory);
