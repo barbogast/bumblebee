@@ -6,22 +6,45 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ColumnsType } from 'antd/es/table';
 
 type EntryType = 'Directory' | 'File' | 'Link' | 'Unknown';
+
+type CompareResult = (
+  | {
+      type: 'CouldNotReadDirectory';
+      path: string;
+      message: string;
+    }
+  | {
+      type: 'CouldNotCalculateHash';
+      path: string;
+      message: string;
+    }
+  | {
+      type: 'DifferingContent';
+      path: string;
+    }
+)[];
+
 type Result = [
   {
     missing_in_dir_a: string[];
     missing_in_dir_b: string[];
   },
   {
-    differing_content: string[];
     type_mismatch: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
   },
-  {
-    path: string;
-    message: string;
-  }[]
+  CompareResult
 ];
 
-type Reason = 'missingInA' | 'missingInB' | 'differingContent' | 'typeMismatch' | 'error';
+// TODO: This hopefully can be removed, wouldn't want to maintain it in addition to CompareResult
+type Reason =
+  | 'missingInA'
+  | 'missingInB'
+  | 'differingContent'
+  | 'typeMismatch'
+  | 'error'
+  | 'CouldNotReadDirectory'
+  | 'CouldNotCalculateHash'
+  | 'DifferingContent';
 
 type TableData = {
   key: string;
@@ -32,12 +55,16 @@ type TableData = {
 const { Header, Content, Footer, Sider } = Layout;
 
 const renderTableCell = (text: string, record: TableData) => {
+  // replace with switch
   const classMap: { [key in Reason]: 'warning' | 'error' } = {
     error: 'error',
     missingInA: 'error',
     missingInB: 'error',
     differingContent: 'warning',
     typeMismatch: 'warning',
+    CouldNotReadDirectory: 'error',
+    CouldNotCalculateHash: 'error',
+    DifferingContent: 'warning',
   };
   return text ? (
     <Alert type={classMap[record.reason]} message={text}>
@@ -71,14 +98,37 @@ function App() {
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
   const [result, setResult] = useState<Result | void>();
+  console.log(result);
 
   const errors: TableData[] = result
-    ? result[2].map((error) => ({
-        key: error.path,
-        path: error.path,
-        reason: 'error',
-        dirA: error.message,
-      }))
+    ? result[2].map((res) => {
+        const { type } = res;
+        switch (type) {
+          case 'CouldNotReadDirectory':
+          case 'CouldNotCalculateHash': {
+            return {
+              key: res.path,
+              path: res.path,
+              reason: res.type, // TODO: Rename "reason" to "type"
+              dirA: res.message,
+            };
+          }
+          case 'DifferingContent': {
+            return {
+              key: res.path,
+              path: res.path,
+              // TODO: Rename "reason" to "type"
+              reason: res.type,
+              dirA: 'Differing content',
+              dirB: 'Differing content',
+            };
+          }
+          default: {
+            const exhaustiveCheck: never = type;
+            throw new Error(`Unhandled case: ${exhaustiveCheck}`);
+          }
+        }
+      })
     : [];
 
   const missingInDirA: TableData[] = result
@@ -99,16 +149,6 @@ function App() {
       }))
     : [];
 
-  const differintContent: TableData[] = result
-    ? result[1].differing_content.map((path) => ({
-        key: path,
-        path,
-        reason: 'differingContent',
-        dirA: 'Differing content',
-        dirB: 'Differing content',
-      }))
-    : [];
-
   const typeMismatch: TableData[] = result
     ? result[1].type_mismatch.map((mismatch) => ({
         key: mismatch.path,
@@ -119,11 +159,7 @@ function App() {
       }))
     : [];
 
-  const tableData = errors
-    .concat(missingInDirA)
-    .concat(missingInDirB)
-    .concat(differintContent)
-    .concat(typeMismatch);
+  const tableData = errors.concat(missingInDirA).concat(missingInDirB).concat(typeMismatch);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
