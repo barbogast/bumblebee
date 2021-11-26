@@ -22,15 +22,18 @@ type CompareResult = (
       type: 'DifferingContent';
       path: string;
     }
+  | {
+      type: 'TypeMismatch';
+      path: string;
+      type_in_dir_a: EntryType;
+      type_in_dir_b: EntryType;
+    }
 )[];
 
 type Result = [
   {
     missing_in_dir_a: string[];
     missing_in_dir_b: string[];
-  },
-  {
-    type_mismatch: { path: string; type_in_dir_a: EntryType; type_in_dir_b: EntryType }[];
   },
   CompareResult
 ];
@@ -44,7 +47,8 @@ type Reason =
   | 'error'
   | 'CouldNotReadDirectory'
   | 'CouldNotCalculateHash'
-  | 'DifferingContent';
+  | 'DifferingContent'
+  | 'TypeMismatch';
 
 type TableData = {
   key: string;
@@ -65,6 +69,7 @@ const renderTableCell = (text: string, record: TableData) => {
     CouldNotReadDirectory: 'error',
     CouldNotCalculateHash: 'error',
     DifferingContent: 'warning',
+    TypeMismatch: 'error',
   };
   return text ? (
     <Alert type={classMap[record.reason]} message={text}>
@@ -101,7 +106,7 @@ function App() {
   console.log(result);
 
   const errors: TableData[] = result
-    ? result[2].map((res) => {
+    ? result[1].map((res) => {
         const { type } = res;
         switch (type) {
           case 'CouldNotReadDirectory':
@@ -121,6 +126,15 @@ function App() {
               reason: res.type,
               dirA: 'Differing content',
               dirB: 'Differing content',
+            };
+          }
+          case 'TypeMismatch': {
+            return {
+              key: res.path,
+              path: res.path,
+              reason: res.type,
+              dirA: res.type_in_dir_a,
+              dirB: res.type_in_dir_b,
             };
           }
           default: {
@@ -149,17 +163,7 @@ function App() {
       }))
     : [];
 
-  const typeMismatch: TableData[] = result
-    ? result[1].type_mismatch.map((mismatch) => ({
-        key: mismatch.path,
-        path: mismatch.path,
-        reason: 'typeMismatch',
-        dirA: mismatch.type_in_dir_a,
-        dirB: mismatch.type_in_dir_b,
-      }))
-    : [];
-
-  const tableData = errors.concat(missingInDirA).concat(missingInDirB).concat(typeMismatch);
+  const tableData = errors.concat(missingInDirA).concat(missingInDirB);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

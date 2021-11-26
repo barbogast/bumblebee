@@ -32,11 +32,6 @@ struct EntryTypeMismatch {
     type_in_dir_b: EntryType,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, serde::Serialize)]
-struct ContentCompareResult {
-    type_mismatch: Vec<EntryTypeMismatch>,
-}
-
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
 struct EntryInfo {
     path: String,
@@ -54,6 +49,7 @@ enum CompareResult {
     CouldNotReadDirectory(ErrorInfo),
     CouldNotCalculateHash(ErrorInfo),
     DifferingContent(EntryInfo),
+    TypeMismatch(EntryTypeMismatch),
 }
 
 fn get_directory_content_recursively(
@@ -132,15 +128,14 @@ fn get_entry_type(path: &std::path::Path) -> EntryType {
     }
 }
 
+// TODO: How about returning errors instead of mutating it?
 fn compare_file_contents(
     dir_a_content: &HashSet<String>,
     dir_b_content: &HashSet<String>,
     dir_a_path: &String,
     dir_b_path: &String,
     errors: &mut Vec<CompareResult>,
-) -> ContentCompareResult {
-    let mut type_mismatch: Vec<EntryTypeMismatch> = Vec::new();
-
+) {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
         let path_a = std::path::Path::new(&dir_a_path).join(path);
@@ -172,16 +167,14 @@ fn compare_file_contents(
                 }));
             }
         } else if !(path_a.is_dir() && path_b.is_dir()) {
-            let entry_type = EntryTypeMismatch {
+            let entry_type = CompareResult::TypeMismatch(EntryTypeMismatch {
                 path: path.clone(),
                 type_in_dir_a: get_entry_type(&path_a),
                 type_in_dir_b: get_entry_type(&path_b),
-            };
-            type_mismatch.push(entry_type);
+            });
+            errors.push(entry_type);
         }
     }
-
-    ContentCompareResult { type_mismatch }
 }
 
 fn analyze(
@@ -200,14 +193,7 @@ fn analyze(
 }
 
 #[tauri::command]
-fn compare(
-    path_a: String,
-    path_b: String,
-) -> (
-    StructureCompareResult,
-    ContentCompareResult,
-    Vec<CompareResult>,
-) {
+fn compare(path_a: String, path_b: String) -> (StructureCompareResult, Vec<CompareResult>) {
     println!("received2");
 
     let mut errors: Vec<CompareResult> = Vec::new();
@@ -217,7 +203,7 @@ fn compare(
 
     let result = analyze(&dir_a_content, &dir_b_content);
 
-    let content_compare_result = compare_file_contents(
+    compare_file_contents(
         &dir_a_content,
         &dir_b_content,
         &path_a,
@@ -225,7 +211,7 @@ fn compare(
         &mut errors,
     );
 
-    (result, content_compare_result, errors).into()
+    (result, errors).into()
 }
 
 fn main() {
@@ -254,7 +240,7 @@ mod tests {
         );
         (result, errors)
     }
-    fn call_content_compare(path: &str) -> (ContentCompareResult, Vec<CompareResult>) {
+    fn call_content_compare(path: &str) -> Vec<CompareResult> {
         let path_a = String::from("./test/") + path + "/dirA";
         let path_b = String::from("./test/") + path + "/dirB";
         let mut errors: Vec<CompareResult> = Vec::new();
@@ -265,7 +251,7 @@ mod tests {
             &path_b,
             &mut errors,
         );
-        (result, errors)
+        return errors;
     }
 
     #[test]
@@ -302,12 +288,6 @@ mod tests {
             &String::from("/etc/sudoers"),
             &String::from("/etc/sudoers"),
             &mut errors,
-        );
-        assert_eq!(
-            result,
-            (ContentCompareResult {
-                type_mismatch: [].to_vec(),
-            })
         );
         assert_eq!(
             errors,
@@ -393,15 +373,10 @@ mod tests {
     fn t_06_different_text_content() {
         assert_eq!(
             call_content_compare("06_different_text_content"),
-            (
-                ContentCompareResult {
-                    type_mismatch: [].to_vec(),
-                },
-                [CompareResult::DifferingContent(EntryInfo {
-                    path: String::from("file1.txt")
-                })]
-                .to_vec()
-            )
+            ([CompareResult::DifferingContent(EntryInfo {
+                path: String::from("file1.txt")
+            })]
+            .to_vec())
         );
     }
 
@@ -409,15 +384,10 @@ mod tests {
     fn t_07_different_binary_content() {
         assert_eq!(
             call_content_compare("07_different_binary_content"),
-            (
-                ContentCompareResult {
-                    type_mismatch: [].to_vec(),
-                },
-                [CompareResult::DifferingContent(EntryInfo {
-                    path: String::from("file1.jpeg")
-                })]
-                .to_vec()
-            )
+            ([CompareResult::DifferingContent(EntryInfo {
+                path: String::from("file1.jpeg")
+            })]
+            .to_vec())
         );
     }
 
@@ -425,17 +395,12 @@ mod tests {
     fn t_08_type_mismatch() {
         assert_eq!(
             call_content_compare("08_type_mismatch"),
-            (
-                ContentCompareResult {
-                    type_mismatch: [EntryTypeMismatch {
-                        path: String::from("file1.txt"),
-                        type_in_dir_a: EntryType::File,
-                        type_in_dir_b: EntryType::Directory
-                    }]
-                    .to_vec(),
-                },
-                [].to_vec()
-            )
+            [CompareResult::TypeMismatch(EntryTypeMismatch {
+                path: String::from("file1.txt"),
+                type_in_dir_a: EntryType::File,
+                type_in_dir_b: EntryType::Directory
+            })]
+            .to_vec(),
         );
     }
 }
