@@ -114,7 +114,6 @@ fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, s
 }
 
 fn get_entry_type(path: &std::path::Path) -> EntryType {
-    dbg!(path, path.is_dir());
     if path.is_dir() {
         EntryType::Directory
     } else if path.is_file() {
@@ -283,7 +282,7 @@ mod tests {
     fn hash_invalid_file() {
         let mut errors: Vec<CompareResult> = Vec::new();
         // Use /etc/sudoers to test a file we are not allowed to read
-        let result = compare_file_contents(
+        compare_file_contents(
             &HashSet::from([String::from("/etc/sudoers")]),
             &HashSet::from([String::from("/etc/sudoers")]),
             &String::from("/etc/sudoers"),
