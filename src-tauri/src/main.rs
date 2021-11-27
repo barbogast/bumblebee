@@ -1,6 +1,3 @@
-// TODO
-// Replace to_vec() and Vec::new() with vec!
-
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
@@ -199,7 +196,7 @@ fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> 
 fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     println!("received2");
 
-    let mut errors: Vec<CompareResult> = Vec::new();
+    let mut errors: Vec<CompareResult> = vec![];
 
     let dir_a_content = get_directory_content_recursively(&path_a, &mut errors);
     let dir_b_content = get_directory_content_recursively(&path_b, &mut errors);
@@ -232,7 +229,7 @@ mod tests {
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
         // TODO: Rename "errors" to "result"
-        let mut errors: Vec<CompareResult> = Vec::new();
+        let mut errors: Vec<CompareResult> = vec![];
         let result = analyze(
             &get_directory_content_recursively(
                 &(String::from("./test/") + path + "/dirA"),
@@ -249,8 +246,8 @@ mod tests {
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
         let path_a = String::from("./test/") + path + "/dirA";
         let path_b = String::from("./test/") + path + "/dirB";
-        let mut errors: Vec<CompareResult> = Vec::new();
-        let result = compare_file_contents(
+        let mut errors: Vec<CompareResult> = vec![];
+        compare_file_contents(
             &get_directory_content_recursively(&path_a, &mut errors),
             &get_directory_content_recursively(&path_b, &mut errors),
             &path_a,
@@ -264,7 +261,7 @@ mod tests {
     fn compare_invalid_directory() {
         assert_eq!(
             call_structure_compare("i_do_not_exist"),
-                [
+                vec![
                   CompareResult::CouldNotReadDirectory(ErrorInfo {
                         path: String::from("./test/i_do_not_exist/dirA"),
                         message: String::from("IO error for operation on ./test/i_do_not_exist/dirA: No such file or directory (os error 2)")
@@ -274,13 +271,12 @@ mod tests {
                       message: String::from("IO error for operation on ./test/i_do_not_exist/dirB: No such file or directory (os error 2)")
                     })
                 ]
-                .to_vec(),
         );
     }
 
     #[test]
     fn hash_invalid_file() {
-        let mut errors: Vec<CompareResult> = Vec::new();
+        let mut errors: Vec<CompareResult> = vec![];
         // Use /etc/sudoers to test a file we are not allowed to read
         compare_file_contents(
             &HashSet::from([String::from("/etc/sudoers")]),
@@ -291,27 +287,25 @@ mod tests {
         );
         assert_eq!(
             errors,
-            [CompareResult::CouldNotCalculateHash(ErrorInfo {
+            vec![CompareResult::CouldNotCalculateHash(ErrorInfo {
                 path: String::from("/etc/sudoers"),
                 message: String::from("Permission denied (os error 13)")
-            }),]
-            .to_vec(),
+            })]
         );
     }
 
     #[test]
     fn t_01_test_files_match() {
-        assert_eq!(call_structure_compare("01_test_files_match"), Vec::new());
+        assert_eq!(call_structure_compare("01_test_files_match"), vec![]);
     }
 
     #[test]
     fn t_02_dir_a_lacks_file() {
         assert_eq!(
             call_structure_compare("02_dirA_lacks_file"),
-            [CompareResult::MissingInDirA(EntryInfo {
+            vec![CompareResult::MissingInDirA(EntryInfo {
                 path: String::from("file2.txt")
             })]
-            .to_vec()
         );
     }
 
@@ -319,10 +313,9 @@ mod tests {
     fn t_03_dir_b_lacks_file() {
         assert_eq!(
             call_structure_compare("03_dirB_lacks_file"),
-            [CompareResult::MissingInDirB(EntryInfo {
+            vec![CompareResult::MissingInDirB(EntryInfo {
                 path: String::from("file1.txt")
             })]
-            .to_vec()
         );
     }
 
@@ -330,10 +323,9 @@ mod tests {
     fn t_04_dir_a_lacks_sub_directory() {
         assert_eq!(
             call_structure_compare("04_dirA_lacks_sub_directory"),
-            [CompareResult::MissingInDirA(EntryInfo {
+            vec![CompareResult::MissingInDirA(EntryInfo {
                 path: String::from("subdir2")
             })]
-            .to_vec()
         );
     }
 
@@ -341,10 +333,9 @@ mod tests {
     fn t_05_dir_a_lacks_file_in_sub_directory() {
         assert_eq!(
             call_structure_compare("05_dirA_lacks_file_in_sub_directory"),
-            [CompareResult::MissingInDirA(EntryInfo {
+            vec![CompareResult::MissingInDirA(EntryInfo {
                 path: String::from("subdir2/file2.txt")
             })]
-            .to_vec()
         );
     }
 
@@ -352,10 +343,9 @@ mod tests {
     fn t_06_different_text_content() {
         assert_eq!(
             call_content_compare("06_different_text_content"),
-            ([CompareResult::DifferingContent(EntryInfo {
+            vec![CompareResult::DifferingContent(EntryInfo {
                 path: String::from("file1.txt")
             })]
-            .to_vec())
         );
     }
 
@@ -363,10 +353,9 @@ mod tests {
     fn t_07_different_binary_content() {
         assert_eq!(
             call_content_compare("07_different_binary_content"),
-            ([CompareResult::DifferingContent(EntryInfo {
+            vec![CompareResult::DifferingContent(EntryInfo {
                 path: String::from("file1.jpeg")
             })]
-            .to_vec())
         );
     }
 
@@ -374,12 +363,11 @@ mod tests {
     fn t_08_type_mismatch() {
         assert_eq!(
             call_content_compare("08_type_mismatch"),
-            [CompareResult::TypeMismatch(EntryTypeMismatch {
+            vec![CompareResult::TypeMismatch(EntryTypeMismatch {
                 path: String::from("file1.txt"),
                 type_in_dir_a: EntryType::File,
                 type_in_dir_b: EntryType::Directory
-            })]
-            .to_vec(),
+            })],
         );
     }
 }
