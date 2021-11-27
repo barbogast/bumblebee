@@ -68,8 +68,13 @@ fn get_directory_content_recursively(
                 errors.push(error);
             }
             Ok(entry) => {
-                let f_name = entry.path().strip_prefix(&dir).unwrap().to_string_lossy();
-                filenames.insert(f_name.to_string());
+                let f_name = entry
+                    .path()
+                    .strip_prefix(&dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+                filenames.insert(f_name);
             }
         }
     }
@@ -84,6 +89,9 @@ where
     I: Iterator<Item = &'a String>,
 {
     paths
+        // Sort entries aphabetially, then only keep an entry if its beginning doesn't match
+        // the previous one.
+        // This relies on /my_dir appearing before /my_dir/file, in which case the latter would be dropped
         .sorted()
         .coalesce(|a, b| if b.starts_with(a) { Ok(a) } else { Err((a, b)) })
 }
@@ -172,7 +180,10 @@ fn compare_file_contents(
     }
 }
 
-fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> Vec<CompareResult> {
+fn find_missing_entries(
+    dir_a_content: &HashSet<String>,
+    dir_b_content: &HashSet<String>,
+) -> Vec<CompareResult> {
     let missing_in_dir_a =
         remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
             .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
@@ -193,7 +204,7 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     let dir_a_content = get_directory_content_recursively(&path_a, &mut errors);
     let dir_b_content = get_directory_content_recursively(&path_b, &mut errors);
 
-    let result = analyze(&dir_a_content, &dir_b_content);
+    let result = find_missing_entries(&dir_a_content, &dir_b_content);
     errors.extend(result);
 
     compare_file_contents(
@@ -222,13 +233,13 @@ mod tests {
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
         // TODO: Rename "errors" to "result"
         let mut errors: Vec<CompareResult> = vec![];
-        let result = analyze(
+        let result = find_missing_entries(
             &get_directory_content_recursively(
-                &(String::from("./test/") + path + "/dirA"),
+                &("./test/".to_string() + path + "/dirA"),
                 &mut errors,
             ),
             &get_directory_content_recursively(
-                &(String::from("./test/") + path + "/dirB"),
+                &("./test/".to_string() + path + "/dirB"),
                 &mut errors,
             ),
         );
