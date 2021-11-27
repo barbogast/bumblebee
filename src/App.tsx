@@ -49,14 +49,14 @@ type Reason =
 type TableData = {
   key: string;
   path: string;
-  reason: Reason;
+  type: Reason;
 };
 
 const { Header, Content, Footer, Sider } = Layout;
 
 const reasonToType = (record: TableData) => {
-  const { reason } = record;
-  switch (reason) {
+  const { type } = record;
+  switch (type) {
     case 'CouldNotCalculateHash':
       return 'error';
     case 'CouldNotReadDirectory':
@@ -70,7 +70,7 @@ const reasonToType = (record: TableData) => {
     case 'TypeMismatch':
       return 'error';
     default: {
-      const exhaustiveCheck: never = reason;
+      const exhaustiveCheck: never = type;
       throw new Error(`Unhandled case: ${exhaustiveCheck}`);
     }
   }
@@ -79,7 +79,7 @@ const reasonToType = (record: TableData) => {
 const renderTableCell = (text: string, record: TableData) => {
   return text ? (
     <Alert type={reasonToType(record)} message={text}>
-      {record.reason}
+      {record.type}
     </Alert>
   ) : null;
 };
@@ -120,7 +120,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: res.type, // TODO: Rename "reason" to "type"
+              type: res.type,
               dirA: res.message,
             };
           }
@@ -128,7 +128,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: res.type,
+              type: res.type,
               dirA: 'File  missing',
             };
           }
@@ -136,7 +136,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: res.type,
+              type: res.type,
               dirA: 'File missing',
             };
           }
@@ -144,8 +144,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              // TODO: Rename "reason" to "type"
-              reason: res.type,
+              type: res.type,
               dirA: 'Differing content',
               dirB: 'Differing content',
             };
@@ -154,7 +153,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: res.type,
+              type: res.type,
               dirA: res.type_in_dir_a,
               dirB: res.type_in_dir_b,
             };
