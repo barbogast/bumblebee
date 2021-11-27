@@ -38,15 +38,7 @@ type CompareResult = (
     }
 )[];
 
-type Result = CompareResult;
-
-// TODO: This hopefully can be removed, wouldn't want to maintain it in addition to CompareResult
 type Reason =
-  | 'missingInA'
-  | 'missingInB'
-  | 'differingContent'
-  | 'typeMismatch'
-  | 'error'
   | 'CouldNotReadDirectory'
   | 'CouldNotCalculateHash'
   | 'MissingInDirA'
@@ -62,23 +54,31 @@ type TableData = {
 
 const { Header, Content, Footer, Sider } = Layout;
 
+const reasonToType = (record: TableData) => {
+  const { reason } = record;
+  switch (reason) {
+    case 'CouldNotCalculateHash':
+      return 'error';
+    case 'CouldNotReadDirectory':
+      return 'error';
+    case 'MissingInDirA':
+      return 'error';
+    case 'MissingInDirB':
+      return 'error';
+    case 'DifferingContent':
+      return 'warning';
+    case 'TypeMismatch':
+      return 'error';
+    default: {
+      const exhaustiveCheck: never = reason;
+      throw new Error(`Unhandled case: ${exhaustiveCheck}`);
+    }
+  }
+};
+
 const renderTableCell = (text: string, record: TableData) => {
-  // replace with switch
-  const classMap: { [key in Reason]: 'warning' | 'error' } = {
-    error: 'error',
-    missingInA: 'error',
-    missingInB: 'error',
-    differingContent: 'warning',
-    typeMismatch: 'warning',
-    MissingInDirA: 'error',
-    MissingInDirB: 'error',
-    CouldNotReadDirectory: 'error',
-    CouldNotCalculateHash: 'error',
-    DifferingContent: 'warning',
-    TypeMismatch: 'error',
-  };
   return text ? (
-    <Alert type={classMap[record.reason]} message={text}>
+    <Alert type={reasonToType(record)} message={text}>
       {record.reason}
     </Alert>
   ) : null;
@@ -108,7 +108,7 @@ function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
-  const [result, setResult] = useState<Result | void>();
+  const [result, setResult] = useState<CompareResult | void>();
   console.log(result);
 
   const errors: TableData[] = result
@@ -128,7 +128,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: 'missingInA',
+              reason: res.type,
               dirA: 'File  missing',
             };
           }
@@ -136,7 +136,7 @@ function App() {
             return {
               key: res.path,
               path: res.path,
-              reason: 'missingInB',
+              reason: res.type,
               dirA: 'File missing',
             };
           }
@@ -213,8 +213,8 @@ function App() {
                 onClick={() => {
                   console.log('invoke');
 
-                  invoke('compare', { pathA, pathB })
-                    .then((message) => setResult(message as Result))
+                  invoke<CompareResult>('compare', { pathA, pathB })
+                    .then((message) => setResult(message))
                     .catch((e) => console.error(e));
                 }}
               >
