@@ -183,7 +183,8 @@ fn compare_file_contents(
 fn find_missing_entries(
     dir_a_content: &HashSet<String>,
     dir_b_content: &HashSet<String>,
-) -> Vec<CompareResult> {
+    errors: &mut Vec<CompareResult>,
+) {
     let missing_in_dir_a =
         remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
             .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
@@ -192,7 +193,8 @@ fn find_missing_entries(
         remove_subdirectories(dir_a_content.difference(&dir_b_content).into_iter())
             .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
 
-    missing_in_dir_a.chain(missing_in_dir_b).collect()
+    let new_errors: Vec<CompareResult> = missing_in_dir_a.chain(missing_in_dir_b).collect();
+    errors.extend(new_errors);
 }
 
 #[tauri::command]
@@ -204,8 +206,7 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     let dir_a_content = get_directory_content_recursively(&path_a, &mut errors);
     let dir_b_content = get_directory_content_recursively(&path_b, &mut errors);
 
-    let result = find_missing_entries(&dir_a_content, &dir_b_content);
-    errors.extend(result);
+    find_missing_entries(&dir_a_content, &dir_b_content, &mut errors);
 
     compare_file_contents(
         &dir_a_content,
@@ -233,7 +234,7 @@ mod tests {
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
         // TODO: Rename "errors" to "result"
         let mut errors: Vec<CompareResult> = vec![];
-        let result = find_missing_entries(
+        find_missing_entries(
             &get_directory_content_recursively(
                 &("./test/".to_string() + path + "/dirA"),
                 &mut errors,
@@ -242,8 +243,8 @@ mod tests {
                 &("./test/".to_string() + path + "/dirB"),
                 &mut errors,
             ),
+            &mut errors,
         );
-        errors.extend(result);
         errors
     }
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
