@@ -1,0 +1,1 @@
+content of file in subdir1/file2.txt
