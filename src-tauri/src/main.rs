@@ -50,7 +50,7 @@ enum CompareResult {
 
 fn get_directory_content_recursively(
     dir: &String,
-    errors: &mut Vec<CompareResult>,
+    results: &mut Vec<CompareResult>,
 ) -> HashSet<String> {
     let mut filenames: HashSet<String> = HashSet::new();
 
@@ -65,7 +65,7 @@ fn get_directory_content_recursively(
                         .to_string(),
                     message: why.to_string(),
                 });
-                errors.push(error);
+                results.push(error);
             }
             Ok(entry) => {
                 let f_name = entry
@@ -137,7 +137,7 @@ fn compare_file_contents(
     dir_b_content: &HashSet<String>,
     dir_a_path: &String,
     dir_b_path: &String,
-    errors: &mut Vec<CompareResult>,
+    results: &mut Vec<CompareResult>,
 ) {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
@@ -146,7 +146,7 @@ fn compare_file_contents(
         if path_a.is_file() && path_b.is_file() {
             let hash_a = match get_file_content_hash(path_a) {
                 Err(why) => {
-                    errors.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
+                    results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
                         path: dir_a_path.clone(),
                         message: why.to_string(),
                     }));
@@ -156,7 +156,7 @@ fn compare_file_contents(
             };
             let hash_b = match get_file_content_hash(path_b) {
                 Err(why) => {
-                    errors.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
+                    results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
                         path: dir_b_path.clone(),
                         message: why.to_string(),
                     }));
@@ -165,7 +165,7 @@ fn compare_file_contents(
                 Ok(res) => res,
             };
             if hash_a != hash_b {
-                errors.push(CompareResult::DifferingContent(EntryInfo {
+                results.push(CompareResult::DifferingContent(EntryInfo {
                     path: path.clone(),
                 }));
             }
@@ -175,7 +175,7 @@ fn compare_file_contents(
                 type_in_dir_a: get_entry_type(&path_a),
                 type_in_dir_b: get_entry_type(&path_b),
             });
-            errors.push(entry_type);
+            results.push(entry_type);
         }
     }
 }
@@ -183,7 +183,7 @@ fn compare_file_contents(
 fn find_missing_entries(
     dir_a_content: &HashSet<String>,
     dir_b_content: &HashSet<String>,
-    errors: &mut Vec<CompareResult>,
+    results: &mut Vec<CompareResult>,
 ) {
     let missing_in_dir_a =
         remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
@@ -194,29 +194,29 @@ fn find_missing_entries(
             .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
 
     let new_errors: Vec<CompareResult> = missing_in_dir_a.chain(missing_in_dir_b).collect();
-    errors.extend(new_errors);
+    results.extend(new_errors);
 }
 
 #[tauri::command]
 fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     println!("received2");
 
-    let mut errors: Vec<CompareResult> = vec![];
+    let mut results: Vec<CompareResult> = vec![];
 
-    let dir_a_content = get_directory_content_recursively(&path_a, &mut errors);
-    let dir_b_content = get_directory_content_recursively(&path_b, &mut errors);
+    let dir_a_content = get_directory_content_recursively(&path_a, &mut results);
+    let dir_b_content = get_directory_content_recursively(&path_b, &mut results);
 
-    find_missing_entries(&dir_a_content, &dir_b_content, &mut errors);
+    find_missing_entries(&dir_a_content, &dir_b_content, &mut results);
 
     compare_file_contents(
         &dir_a_content,
         &dir_b_content,
         &path_a,
         &path_b,
-        &mut errors,
+        &mut results,
     );
 
-    errors.into()
+    results.into()
 }
 
 fn main() {
@@ -233,32 +233,32 @@ mod tests {
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
         // TODO: Rename "errors" to "result"
-        let mut errors: Vec<CompareResult> = vec![];
+        let mut results: Vec<CompareResult> = vec![];
         find_missing_entries(
             &get_directory_content_recursively(
                 &("./test/".to_string() + path + "/dirA"),
-                &mut errors,
+                &mut results,
             ),
             &get_directory_content_recursively(
                 &("./test/".to_string() + path + "/dirB"),
-                &mut errors,
+                &mut results,
             ),
-            &mut errors,
+            &mut results,
         );
-        errors
+        results
     }
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
         let path_a = String::from("./test/") + path + "/dirA";
         let path_b = String::from("./test/") + path + "/dirB";
-        let mut errors: Vec<CompareResult> = vec![];
+        let mut results: Vec<CompareResult> = vec![];
         compare_file_contents(
-            &get_directory_content_recursively(&path_a, &mut errors),
-            &get_directory_content_recursively(&path_b, &mut errors),
+            &get_directory_content_recursively(&path_a, &mut results),
+            &get_directory_content_recursively(&path_b, &mut results),
             &path_a,
             &path_b,
-            &mut errors,
+            &mut results,
         );
-        return errors;
+        return results;
     }
 
     #[test]
@@ -280,17 +280,17 @@ mod tests {
 
     #[test]
     fn hash_invalid_file() {
-        let mut errors: Vec<CompareResult> = vec![];
+        let mut results: Vec<CompareResult> = vec![];
         // Use /etc/sudoers to test a file we are not allowed to read
         compare_file_contents(
             &HashSet::from([String::from("/etc/sudoers")]),
             &HashSet::from([String::from("/etc/sudoers")]),
             &String::from("/etc/sudoers"),
             &String::from("/etc/sudoers"),
-            &mut errors,
+            &mut results,
         );
         assert_eq!(
-            errors,
+            results,
             vec![CompareResult::CouldNotCalculateHash(ErrorInfo {
                 path: String::from("/etc/sudoers"),
                 message: String::from("Permission denied (os error 13)")
