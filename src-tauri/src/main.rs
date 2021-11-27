@@ -81,7 +81,7 @@ fn get_directory_content_recursively(
 // In this case we only need to know that the directory is missing, so let's filter out the contents.
 fn remove_subdirectories<'a, I>(paths: I) -> impl Iterator<Item = &'a String>
 where
-    I: impl Iterator<Item = &'a String>,
+    I: Iterator<Item = &'a String>,
 {
     paths
         .sorted()
