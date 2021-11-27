@@ -79,13 +79,13 @@ fn get_directory_content_recursively(
 
 // When handling missing directories / files the initial list contains missing directories and each missing file.
 // In this case we only need to know that the directory is missing, so let's filter out the contents.
-fn remove_subdirectories(paths: &Vec<String>) -> Vec<String> {
+fn remove_subdirectories<'a, I>(paths: I) -> impl Iterator<Item = &'a String>
+where
+    I: impl Iterator<Item = &'a String>,
+{
     paths
-        .into_iter()
         .sorted()
         .coalesce(|a, b| if b.starts_with(a) { Ok(a) } else { Err((a, b)) })
-        .cloned()
-        .collect()
 }
 
 fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, std::io::Error> {
@@ -173,23 +173,15 @@ fn compare_file_contents(
 }
 
 fn analyze(dir_a_content: &HashSet<String>, dir_b_content: &HashSet<String>) -> Vec<CompareResult> {
-    let mut missing_in_dir_a: Vec<CompareResult> =
-    // TODO: make remove_subdirectories operate on the iterator
-        remove_subdirectories(&dir_b_content.difference(&dir_a_content).cloned().collect())
-            .iter()
-            .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }))
-            .collect();
+    let missing_in_dir_a =
+        remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
+            .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
 
-    let missing_in_dir_b: Vec<CompareResult> =
-    // TODO: make remove_subdirectories operate on the iterator
-          remove_subdirectories(&dir_a_content.difference(&dir_b_content).cloned().collect())
-              .iter()
-              .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }))
-              .collect();
+    let missing_in_dir_b =
+        remove_subdirectories(dir_a_content.difference(&dir_b_content).into_iter())
+            .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
 
-    // TODO This is also somewhat strange, why do we continue with missing_in_dir_a?
-    missing_in_dir_a.extend(missing_in_dir_b);
-    missing_in_dir_a
+    missing_in_dir_a.chain(missing_in_dir_b).collect()
 }
 
 #[tauri::command]
