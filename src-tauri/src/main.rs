@@ -8,7 +8,8 @@ use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{self, BufReader, Read};
+use std::path::Path;
 use walkdir::WalkDir;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
@@ -60,7 +61,7 @@ fn get_directory_content_recursively(
                 let error = CompareResult::CouldNotReadDirectory(ErrorInfo {
                     path: why
                         .path()
-                        .unwrap_or(std::path::Path::new(""))
+                        .unwrap_or(Path::new(""))
                         .to_string_lossy()
                         .to_string(),
                     message: why.to_string(),
@@ -96,7 +97,7 @@ where
         .coalesce(|a, b| if b.starts_with(a) { Ok(a) } else { Err((a, b)) })
 }
 
-fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, std::io::Error> {
+fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, io::Error> {
     let mut context = Context::new(&SHA256);
     let mut buffer = [0; 1024];
 
@@ -111,14 +112,14 @@ fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, std::io::Error> {
     Ok(context.finish())
 }
 
-fn get_file_content_hash<P: AsRef<std::path::Path>>(path: P) -> Result<String, std::io::Error> {
+fn get_file_content_hash<P: AsRef<Path>>(path: P) -> Result<String, io::Error> {
     let input = File::open(path)?;
     let reader = BufReader::new(input);
     let digest = sha256_digest(reader)?;
     Ok(HEXUPPER.encode(digest.as_ref()))
 }
 
-fn get_entry_type(path: &std::path::Path) -> EntryType {
+fn get_entry_type(path: &Path) -> EntryType {
     if path.is_dir() {
         EntryType::Directory
     } else if path.is_file() {
@@ -141,8 +142,8 @@ fn compare_file_contents(
 ) {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
-        let path_a = std::path::Path::new(&dir_a_path).join(path);
-        let path_b = std::path::Path::new(&dir_b_path).join(path);
+        let path_a = Path::new(&dir_a_path).join(path);
+        let path_b = Path::new(&dir_b_path).join(path);
         if path_a.is_file() && path_b.is_file() {
             let hash_a = match get_file_content_hash(path_a) {
                 Err(why) => {
