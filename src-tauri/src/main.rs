@@ -133,12 +133,7 @@ fn get_entry_type(path: &Path) -> EntryType {
     }
 }
 
-fn compare_files(
-    path_a: &Path,
-    path_b: &Path,
-    sub_path: &String,
-    results: &mut Vec<CompareResult>,
-) -> Result<(), CompareResult> {
+fn compare_files(path_a: &Path, path_b: &Path, sub_path: &String) -> Result<(), CompareResult> {
     let hash_a = (get_file_content_hash(path_a).map_err(|why| {
         CompareResult::CouldNotCalculateHash(ErrorInfo {
             path: path_a.to_string_lossy().to_string(),
@@ -152,7 +147,7 @@ fn compare_files(
         })
     })?;
     if hash_a != hash_b {
-        results.push(CompareResult::DifferingContent(EntryInfo {
+        return Err(CompareResult::DifferingContent(EntryInfo {
             path: sub_path.clone(),
         }));
     }
@@ -172,7 +167,7 @@ fn compare_directory_contents(
         let path_a = Path::new(&dir_a_path).join(path);
         let path_b = Path::new(&dir_b_path).join(path);
         if path_a.is_file() && path_b.is_file() {
-            match compare_files(&path_a, &path_b, path, results) {
+            match compare_files(&path_a, &path_b, path) {
                 Err(e) => results.push(e),
                 Ok(()) => (),
             };
