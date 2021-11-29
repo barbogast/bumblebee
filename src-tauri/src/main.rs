@@ -138,32 +138,25 @@ fn compare_files(
     path_b: &Path,
     sub_path: &String,
     results: &mut Vec<CompareResult>,
-) {
-    let hash_a = match get_file_content_hash(path_a) {
-        Err(why) => {
-            results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
-                path: path_a.to_string_lossy().to_string(),
-                message: why.to_string(),
-            }));
-            return;
-        }
-        Ok(res) => res,
-    };
-    let hash_b = match get_file_content_hash(path_b) {
-        Err(why) => {
-            results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
-                path: path_b.to_string_lossy().to_string(),
-                message: why.to_string(),
-            }));
-            return;
-        }
-        Ok(res) => res,
-    };
+) -> Result<(), CompareResult> {
+    let hash_a = (get_file_content_hash(path_a).map_err(|why| {
+        CompareResult::CouldNotCalculateHash(ErrorInfo {
+            path: path_a.to_string_lossy().to_string(),
+            message: why.to_string(),
+        })
+    }))?;
+    let hash_b = get_file_content_hash(path_b).map_err(|why| {
+        CompareResult::CouldNotCalculateHash(ErrorInfo {
+            path: path_b.to_string_lossy().to_string(),
+            message: why.to_string(),
+        })
+    })?;
     if hash_a != hash_b {
         results.push(CompareResult::DifferingContent(EntryInfo {
             path: sub_path.clone(),
         }));
     }
+    Ok(())
 }
 
 // TODO: How about returning errors instead of mutating it?
@@ -179,7 +172,10 @@ fn compare_directory_contents(
         let path_a = Path::new(&dir_a_path).join(path);
         let path_b = Path::new(&dir_b_path).join(path);
         if path_a.is_file() && path_b.is_file() {
-            compare_files(&path_a, &path_b, path, results);
+            match compare_files(&path_a, &path_b, path, results) {
+                Err(e) => results.push(e),
+                Ok(()) => (),
+            };
         } else if !(path_a.is_dir() && path_b.is_dir()) {
             let entry_type = CompareResult::TypeMismatch(EntryTypeMismatch {
                 path: path.clone(),
