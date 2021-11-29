@@ -132,8 +132,41 @@ fn get_entry_type(path: &Path) -> EntryType {
     }
 }
 
+fn compare_files(
+    path_a: &Path,
+    path_b: &Path,
+    sub_path: &String,
+    results: &mut Vec<CompareResult>,
+) {
+    let hash_a = match get_file_content_hash(path_a) {
+        Err(why) => {
+            results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
+                path: path_a.to_string_lossy().to_string(),
+                message: why.to_string(),
+            }));
+            return;
+        }
+        Ok(res) => res,
+    };
+    let hash_b = match get_file_content_hash(path_b) {
+        Err(why) => {
+            results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
+                path: path_b.to_string_lossy().to_string(),
+                message: why.to_string(),
+            }));
+            return;
+        }
+        Ok(res) => res,
+    };
+    if hash_a != hash_b {
+        results.push(CompareResult::DifferingContent(EntryInfo {
+            path: sub_path.clone(),
+        }));
+    }
+}
+
 // TODO: How about returning errors instead of mutating it?
-fn compare_file_contents(
+fn compare_directory_contents(
     dir_a_content: &HashSet<String>,
     dir_b_content: &HashSet<String>,
     dir_a_path: &String,
@@ -145,31 +178,7 @@ fn compare_file_contents(
         let path_a = Path::new(&dir_a_path).join(path);
         let path_b = Path::new(&dir_b_path).join(path);
         if path_a.is_file() && path_b.is_file() {
-            let hash_a = match get_file_content_hash(path_a) {
-                Err(why) => {
-                    results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
-                        path: dir_a_path.clone(),
-                        message: why.to_string(),
-                    }));
-                    continue;
-                }
-                Ok(res) => res,
-            };
-            let hash_b = match get_file_content_hash(path_b) {
-                Err(why) => {
-                    results.push(CompareResult::CouldNotCalculateHash(ErrorInfo {
-                        path: dir_b_path.clone(),
-                        message: why.to_string(),
-                    }));
-                    continue;
-                }
-                Ok(res) => res,
-            };
-            if hash_a != hash_b {
-                results.push(CompareResult::DifferingContent(EntryInfo {
-                    path: path.clone(),
-                }));
-            }
+            compare_files(&path_a, &path_b, path, results);
         } else if !(path_a.is_dir() && path_b.is_dir()) {
             let entry_type = CompareResult::TypeMismatch(EntryTypeMismatch {
                 path: path.clone(),
@@ -209,7 +218,7 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
 
     find_missing_entries(&dir_a_content, &dir_b_content, &mut results);
 
-    compare_file_contents(
+    compare_directory_contents(
         &dir_a_content,
         &dir_b_content,
         &path_a,
@@ -252,7 +261,7 @@ mod tests {
         let path_a = String::from("./test/") + path + "/dirA";
         let path_b = String::from("./test/") + path + "/dirB";
         let mut results: Vec<CompareResult> = vec![];
-        compare_file_contents(
+        compare_directory_contents(
             &get_directory_content_recursively(&path_a, &mut results),
             &get_directory_content_recursively(&path_b, &mut results),
             &path_a,
@@ -283,7 +292,7 @@ mod tests {
     fn hash_invalid_file() {
         let mut results: Vec<CompareResult> = vec![];
         // Use /etc/sudoers to test a file we are not allowed to read
-        compare_file_contents(
+        compare_directory_contents(
             &HashSet::from([String::from("/etc/sudoers")]),
             &HashSet::from([String::from("/etc/sudoers")]),
             &String::from("/etc/sudoers"),
