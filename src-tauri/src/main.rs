@@ -72,7 +72,8 @@ fn get_directory_content_recursively(
                 let f_name = entry
                     .path()
                     .strip_prefix(&dir)
-                    .unwrap()
+                    // This should never panic as the path should always start with the base directory
+                    .expect("Path doesn't sart with base directory")
                     .to_string_lossy()
                     .to_string();
                 filenames.insert(f_name);
