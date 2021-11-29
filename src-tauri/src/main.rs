@@ -174,15 +174,11 @@ fn compare_directory_contents(
     dir_b_content: &HashSet<String>,
     dir_a_path: &String,
     dir_b_path: &String,
-    results: &mut Vec<CompareResult>,
-) {
+) -> Vec<CompareResult> {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
-    for path in present_in_both {
-        match compare_entry(&dir_a_path, &dir_b_path, &path) {
-            Err(e) => results.push(e),
-            Ok(()) => (),
-        }
-    }
+    present_in_both
+        .filter_map(|path| compare_entry(&dir_a_path, &dir_b_path, &path).err())
+        .collect()
 }
 
 fn find_missing_entries(
@@ -213,13 +209,12 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
 
     find_missing_entries(&dir_a_content, &dir_b_content, &mut results);
 
-    compare_directory_contents(
+    results.extend(compare_directory_contents(
         &dir_a_content,
         &dir_b_content,
         &path_a,
         &path_b,
-        &mut results,
-    );
+    ));
 
     results.into()
 }
@@ -261,9 +256,7 @@ mod tests {
             &get_directory_content_recursively(&path_b, &mut results),
             &path_a,
             &path_b,
-            &mut results,
-        );
-        return results;
+        )
     }
 
     #[test]
@@ -285,14 +278,12 @@ mod tests {
 
     #[test]
     fn hash_invalid_file() {
-        let mut results: Vec<CompareResult> = vec![];
         // Use /etc/sudoers to test a file we are not allowed to read
-        compare_directory_contents(
+        let results = compare_directory_contents(
             &HashSet::from([String::from("/etc/sudoers")]),
             &HashSet::from([String::from("/etc/sudoers")]),
             &String::from("/etc/sudoers"),
             &String::from("/etc/sudoers"),
-            &mut results,
         );
         assert_eq!(
             results,
