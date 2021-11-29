@@ -154,6 +154,29 @@ fn compare_files(path_a: &Path, path_b: &Path, sub_path: &String) -> Result<(), 
     Ok(())
 }
 
+fn compare_entry(
+    dir_a_path: &String,
+    dir_b_path: &String,
+    sub_path: &String,
+    results: &mut Vec<CompareResult>,
+) {
+    let path_a = Path::new(&dir_a_path).join(sub_path);
+    let path_b = Path::new(&dir_b_path).join(sub_path);
+    if path_a.is_file() && path_b.is_file() {
+        match compare_files(&path_a, &path_b, &sub_path) {
+            Err(e) => results.push(e),
+            Ok(()) => (),
+        };
+    } else if !(path_a.is_dir() && path_b.is_dir()) {
+        let entry_type = CompareResult::TypeMismatch(EntryTypeMismatch {
+            path: sub_path.clone(),
+            type_in_dir_a: get_entry_type(&path_a),
+            type_in_dir_b: get_entry_type(&path_b),
+        });
+        results.push(entry_type);
+    }
+}
+
 // TODO: How about returning errors instead of mutating it?
 fn compare_directory_contents(
     dir_a_content: &HashSet<String>,
@@ -164,21 +187,7 @@ fn compare_directory_contents(
 ) {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
     for path in present_in_both {
-        let path_a = Path::new(&dir_a_path).join(path);
-        let path_b = Path::new(&dir_b_path).join(path);
-        if path_a.is_file() && path_b.is_file() {
-            match compare_files(&path_a, &path_b, path) {
-                Err(e) => results.push(e),
-                Ok(()) => (),
-            };
-        } else if !(path_a.is_dir() && path_b.is_dir()) {
-            let entry_type = CompareResult::TypeMismatch(EntryTypeMismatch {
-                path: path.clone(),
-                type_in_dir_a: get_entry_type(&path_a),
-                type_in_dir_b: get_entry_type(&path_b),
-            });
-            results.push(entry_type);
-        }
+        compare_entry(&dir_a_path, &dir_b_path, &path, results);
     }
 }
 
