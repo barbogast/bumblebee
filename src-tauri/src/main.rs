@@ -49,11 +49,9 @@ enum CompareResult {
     TypeMismatch(EntryTypeMismatch),
 }
 
-fn get_directory_content_recursively(
-    dir: &String,
-    results: &mut Vec<CompareResult>,
-) -> HashSet<String> {
+fn get_directory_content_recursively(dir: &String) -> (HashSet<String>, Vec<CompareResult>) {
     let mut filenames: HashSet<String> = HashSet::new();
+    let mut errors: Vec<CompareResult> = Vec::new();
 
     for result in WalkDir::new(&dir).into_iter() {
         match result {
@@ -66,7 +64,7 @@ fn get_directory_content_recursively(
                         .to_string(),
                     message: why.to_string(),
                 });
-                results.push(error);
+                errors.push(error);
             }
             Ok(entry) => {
                 let f_name = entry
@@ -81,7 +79,7 @@ fn get_directory_content_recursively(
         }
     }
 
-    filenames
+    (filenames, errors)
 }
 
 // When handling missing directories / files the initial list contains missing directories and each missing file.
@@ -197,13 +195,13 @@ fn find_missing_entries<'a>(
 fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     println!("received2");
 
-    let mut results: Vec<CompareResult> = vec![];
+    let (dir_a_content, dir_a_errors) = get_directory_content_recursively(&path_a);
+    let (dir_b_content, dir_b_errors) = get_directory_content_recursively(&path_b);
 
-    let dir_a_content = get_directory_content_recursively(&path_a, &mut results);
-    let dir_b_content = get_directory_content_recursively(&path_b, &mut results);
-
-    results
+    vec![]
         .into_iter()
+        .chain(dir_a_errors)
+        .chain(dir_b_errors)
         .chain(find_missing_entries(&dir_a_content, &dir_b_content))
         .chain(compare_directory_contents(
             &dir_a_content,
@@ -211,12 +209,12 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
             &path_a,
             &path_b,
         ))
-        .collect()
+        .collect::<Vec<CompareResult>>()
 }
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![compare])
+        .invoke_handler(tauri::generate_handler![compare, copy])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -227,45 +225,34 @@ mod tests {
     use super::*;
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
-        let mut results: Vec<CompareResult> = vec![];
-        let dir_content_a = get_directory_content_recursively(
-            &("./test/".to_string() + path + "/dirA"),
-            &mut results,
-        );
-        let dir_content_b = get_directory_content_recursively(
-            &("./test/".to_string() + path + "/dirB"),
-            &mut results,
-        );
-        results.extend(find_missing_entries(&dir_content_a, &dir_content_b));
-        results
+        let (dir_content_a, dir_a_errors) =
+            get_directory_content_recursively(&("./test/".to_string() + path + "/dirA"));
+        let (dir_content_b, dir_b_errors) =
+            get_directory_content_recursively(&("./test/".to_string() + path + "/dirB"));
+        assert_eq!(dir_a_errors, vec![]);
+        assert_eq!(dir_b_errors, vec![]);
+        find_missing_entries(&dir_content_a, &dir_content_b).collect()
     }
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
-        let path_a = String::from("./test/") + path + "/dirA";
-        let path_b = String::from("./test/") + path + "/dirB";
-        let mut results: Vec<CompareResult> = vec![];
-        compare_directory_contents(
-            &get_directory_content_recursively(&path_a, &mut results),
-            &get_directory_content_recursively(&path_b, &mut results),
-            &path_a,
-            &path_b,
-        )
-        .collect()
+        let path_a = "./test/".to_string() + path + "/dirA";
+        let path_b = "./test/".to_string() + path + "/dirB";
+        let (dir_content_a, dir_a_errors) = get_directory_content_recursively(&path_a);
+        let (dir_content_b, dir_b_errors) = get_directory_content_recursively(&path_b);
+        assert_eq!(dir_a_errors, vec![]);
+        assert_eq!(dir_b_errors, vec![]);
+        compare_directory_contents(&dir_content_a, &dir_content_b, &path_a, &path_b).collect()
     }
 
     #[test]
-    fn compare_invalid_directory() {
+    fn read_invalid_directory() {
         assert_eq!(
-            call_structure_compare("i_do_not_exist"),
-                vec![
+            get_directory_content_recursively(&("i_do_not_exist".to_string())),
+                (HashSet::new(), vec![
                   CompareResult::CouldNotReadDirectory(ErrorInfo {
-                        path: String::from("./test/i_do_not_exist/dirA"),
-                        message: String::from("IO error for operation on ./test/i_do_not_exist/dirA: No such file or directory (os error 2)")
+                        path: String::from("i_do_not_exist"),
+                        message: String::from("IO error for operation on i_do_not_exist: No such file or directory (os error 2)")
                     }),
-                    CompareResult::CouldNotReadDirectory(ErrorInfo {
-                      path: String::from("./test/i_do_not_exist/dirB"),
-                      message: String::from("IO error for operation on ./test/i_do_not_exist/dirB: No such file or directory (os error 2)")
-                    })
-                ]
+                ])
         );
     }
 
