@@ -136,10 +136,10 @@ fn get_entry_type(path: &Path) -> EntryType {
 fn compare_entry(
     dir_a_path: &String,
     dir_b_path: &String,
-    sub_path: &String,
+    sub_path: String,
 ) -> Result<(), CompareResult> {
-    let path_a = Path::new(&dir_a_path).join(sub_path);
-    let path_b = Path::new(&dir_b_path).join(sub_path);
+    let path_a = Path::new(&dir_a_path).join(&sub_path);
+    let path_b = Path::new(&dir_b_path).join(&sub_path);
     if path_a.is_file() && path_b.is_file() {
         let hash_a = (get_file_content_hash(&path_a).map_err(|why| {
             CompareResult::CouldNotCalculateHash(ErrorInfo {
@@ -168,24 +168,20 @@ fn compare_entry(
     Ok(())
 }
 
-// TODO: How about returning errors instead of mutating it?
-fn compare_directory_contents(
-    dir_a_content: &HashSet<String>,
-    dir_b_content: &HashSet<String>,
-    dir_a_path: &String,
-    dir_b_path: &String,
-) -> Vec<CompareResult> {
+fn compare_directory_contents<'a>(
+    dir_a_content: &'a HashSet<String>,
+    dir_b_content: &'a HashSet<String>,
+    dir_a_path: &'a String,
+    dir_b_path: &'a String,
+) -> impl Iterator<Item = CompareResult> + 'a {
     let present_in_both = dir_a_content.intersection(&dir_b_content);
-    present_in_both
-        .filter_map(|path| compare_entry(&dir_a_path, &dir_b_path, &path).err())
-        .collect()
+    present_in_both.filter_map(|path| compare_entry(dir_a_path, dir_b_path, path.to_string()).err())
 }
 
-fn find_missing_entries(
-    dir_a_content: &HashSet<String>,
-    dir_b_content: &HashSet<String>,
-    results: &mut Vec<CompareResult>,
-) {
+fn find_missing_entries<'a>(
+    dir_a_content: &'a HashSet<String>,
+    dir_b_content: &'a HashSet<String>,
+) -> Box<dyn Iterator<Item = CompareResult> + 'a> {
     let missing_in_dir_a =
         remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
             .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
@@ -194,8 +190,7 @@ fn find_missing_entries(
         remove_subdirectories(dir_a_content.difference(&dir_b_content).into_iter())
             .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
 
-    let new_errors: Vec<CompareResult> = missing_in_dir_a.chain(missing_in_dir_b).collect();
-    results.extend(new_errors);
+    Box::new(missing_in_dir_a.chain(missing_in_dir_b))
 }
 
 #[tauri::command]
@@ -207,16 +202,16 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     let dir_a_content = get_directory_content_recursively(&path_a, &mut results);
     let dir_b_content = get_directory_content_recursively(&path_b, &mut results);
 
-    find_missing_entries(&dir_a_content, &dir_b_content, &mut results);
-
-    results.extend(compare_directory_contents(
-        &dir_a_content,
-        &dir_b_content,
-        &path_a,
-        &path_b,
-    ));
-
-    results.into()
+    results
+        .into_iter()
+        .chain(find_missing_entries(&dir_a_content, &dir_b_content))
+        .chain(compare_directory_contents(
+            &dir_a_content,
+            &dir_b_content,
+            &path_a,
+            &path_b,
+        ))
+        .collect()
 }
 
 fn main() {
@@ -232,19 +227,16 @@ mod tests {
     use super::*;
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
-        // TODO: Rename "errors" to "result"
         let mut results: Vec<CompareResult> = vec![];
-        find_missing_entries(
-            &get_directory_content_recursively(
-                &("./test/".to_string() + path + "/dirA"),
-                &mut results,
-            ),
-            &get_directory_content_recursively(
-                &("./test/".to_string() + path + "/dirB"),
-                &mut results,
-            ),
+        let dir_content_a = get_directory_content_recursively(
+            &("./test/".to_string() + path + "/dirA"),
             &mut results,
         );
+        let dir_content_b = get_directory_content_recursively(
+            &("./test/".to_string() + path + "/dirB"),
+            &mut results,
+        );
+        results.extend(find_missing_entries(&dir_content_a, &dir_content_b));
         results
     }
     fn call_content_compare(path: &str) -> Vec<CompareResult> {
@@ -257,6 +249,7 @@ mod tests {
             &path_a,
             &path_b,
         )
+        .collect()
     }
 
     #[test]
@@ -279,14 +272,11 @@ mod tests {
     #[test]
     fn hash_invalid_file() {
         // Use /etc/sudoers to test a file we are not allowed to read
-        let results = compare_directory_contents(
-            &HashSet::from([String::from("/etc/sudoers")]),
-            &HashSet::from([String::from("/etc/sudoers")]),
-            &String::from("/etc/sudoers"),
-            &String::from("/etc/sudoers"),
-        );
+        let dir = String::from("/etc/sudoers");
+        let dir_content = &HashSet::from([dir.clone()]);
+        let results = compare_directory_contents(dir_content, dir_content, &dir, &dir);
         assert_eq!(
-            results,
+            results.collect::<Vec<CompareResult>>(),
             vec![CompareResult::CouldNotCalculateHash(ErrorInfo {
                 path: String::from("/etc/sudoers"),
                 message: String::from("Permission denied (os error 13)")
