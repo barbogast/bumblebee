@@ -295,12 +295,15 @@ mod tests {
     fn read_invalid_directory() {
         assert_eq!(
             get_directory_content_recursively(&("i_do_not_exist".to_string())),
-                (HashSet::new(), vec![
-                  CompareResult::CouldNotReadDirectory(ErrorInfo {
-                        path: String::from("i_do_not_exist"),
-                        message: String::from("IO error for operation on i_do_not_exist: No such file or directory (os error 2)")
-                    }),
-                ])
+            (
+                HashSet::new(),
+                vec![CompareResult::CouldNotReadDirectory(ErrorInfo {
+                    path: String::from("i_do_not_exist"),
+                    message: String::from(
+                        "IO error for operation on i_do_not_exist: No such file or directory (os error 2)"
+                    )
+                }),]
+            )
         );
     }
 
