@@ -7,12 +7,12 @@ use data_encoding::HEXUPPER;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::collections::HashSet;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufReader, Read};
 use std::path::Path;
 use walkdir::WalkDir;
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 enum EntryType {
     Directory,
     File,
@@ -20,25 +20,25 @@ enum EntryType {
     Unknown,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 struct EntryTypeMismatch {
     path: String,
     type_in_dir_a: EntryType,
     type_in_dir_b: EntryType,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 struct EntryInfo {
     path: String,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 struct ErrorInfo {
     path: String,
     message: String,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, serde::Serialize)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 enum CompareResult {
     CouldNotReadDirectory(ErrorInfo),
@@ -49,11 +49,24 @@ enum CompareResult {
     TypeMismatch(EntryTypeMismatch),
 }
 
+impl CompareResult {
+    fn path(&self) -> &String {
+        match self {
+            CompareResult::CouldNotReadDirectory(s) => &s.path,
+            CompareResult::CouldNotCalculateHash(s) => &s.path,
+            CompareResult::MissingInDirA(s) => &s.path,
+            CompareResult::MissingInDirB(s) => &s.path,
+            CompareResult::DifferingContent(s) => &s.path,
+            CompareResult::TypeMismatch(s) => &s.path,
+        }
+    }
+}
+
 fn get_directory_content_recursively(dir: &String) -> (HashSet<String>, Vec<CompareResult>) {
     let mut filenames: HashSet<String> = HashSet::new();
     let mut errors: Vec<CompareResult> = Vec::new();
 
-    for result in WalkDir::new(&dir).into_iter() {
+    for result in WalkDir::new(&dir) {
         match result {
             Err(why) => {
                 let error = CompareResult::CouldNotReadDirectory(ErrorInfo {
@@ -198,7 +211,7 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
     let (dir_a_content, dir_a_errors) = get_directory_content_recursively(&path_a);
     let (dir_b_content, dir_b_errors) = get_directory_content_recursively(&path_b);
 
-    vec![]
+    let mut res = vec![]
         .into_iter()
         .chain(dir_a_errors)
         .chain(dir_b_errors)
@@ -209,7 +222,32 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
             &path_a,
             &path_b,
         ))
-        .collect::<Vec<CompareResult>>()
+        .collect::<Vec<CompareResult>>();
+
+    // Sort so the order of the reuslts doesn't change between runs
+    // This is important for the tests but probably also reasonable for the user
+    res.sort();
+
+    res
+}
+
+#[tauri::command]
+fn copy(path_source: String, path_target: String, sub_paths: Vec<CompareResult>) -> Vec<ErrorInfo> {
+    sub_paths
+        .into_iter()
+        .map(|path| path.path().clone())
+        .filter_map(|path| {
+            fs::copy(
+                Path::new(&path_source).join(&path),
+                Path::new(&path_target).join(&path),
+            )
+            .map_err(|error| ErrorInfo {
+                message: error.to_string(),
+                path,
+            })
+            .err()
+        })
+        .collect()
 }
 
 fn main() {
@@ -223,6 +261,8 @@ fn main() {
 
 mod tests {
     use super::*;
+    use fs_extra;
+    use tempfile::tempdir;
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
         let (dir_content_a, dir_a_errors) =
@@ -241,6 +281,14 @@ mod tests {
         assert_eq!(dir_a_errors, vec![]);
         assert_eq!(dir_b_errors, vec![]);
         compare_directory_contents(&dir_content_a, &dir_content_b, &path_a, &path_b).collect()
+    }
+
+    /// Creates a temporary directory under /tmp and copies the given `path` to this directory
+    fn create_test_directory(path: &str) -> fs_extra::error::Result<tempfile::TempDir> {
+        let dir = tempdir()?;
+        dbg!("Copy {} to {}", &path, dir.path());
+        fs_extra::copy_items(&[path], &dir, &fs_extra::dir::CopyOptions::new())?;
+        Ok(dir)
     }
 
     #[test]
@@ -346,5 +394,94 @@ mod tests {
                 type_in_dir_b: EntryType::Directory
             })],
         );
+    }
+
+    #[test]
+    fn test_copy_files() -> Result<(), fs_extra::error::Error> {
+        // To test copying files we:
+        //   1. Copy the folder of "00_all_cases" to a new folder in /tmp
+        //   2. Make sure that dirA and dirB contain the expected differences
+        //   3. Run copy() for one of the differences
+        //   4. Run the comparison again to assert that the expected difference disappeared
+        // Note that 2, 3 and 4 are all executed on the copied directoy in /tmp
+        let dir = create_test_directory("test/00_all_cases")?;
+        let path_a = dir
+            .path()
+            .join("00_all_cases")
+            .join("dirA")
+            .to_string_lossy()
+            .to_string();
+        let path_b = dir
+            .path()
+            .join("00_all_cases")
+            .join("dirB")
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!(
+            compare(path_a.clone(), path_b.clone()),
+            vec![
+                CompareResult::MissingInDirA(EntryInfo {
+                    path: "file_only_in_b.txt".to_string(),
+                }),
+                CompareResult::MissingInDirA(EntryInfo {
+                    path: "subdir_only_in_b".to_string(),
+                }),
+                CompareResult::MissingInDirB(EntryInfo {
+                    path: "file_only_in_a.txt".to_string(),
+                }),
+                CompareResult::MissingInDirB(EntryInfo {
+                    path: "subdir_only_in_a".to_string(),
+                }),
+                CompareResult::DifferingContent(EntryInfo {
+                    path: "differing_content.txt".to_string(),
+                }),
+                CompareResult::TypeMismatch(EntryTypeMismatch {
+                    path: "differing_type.txt".to_string(),
+                    type_in_dir_a: EntryType::File,
+                    type_in_dir_b: EntryType::Directory,
+                }),
+            ]
+        );
+
+        let errors = copy(
+            path_a.clone(),
+            path_b.clone(),
+            vec![CompareResult::MissingInDirB(EntryInfo {
+                path: "file_only_in_a.txt".to_string(),
+            })],
+        );
+
+        let expected_errors: Vec<ErrorInfo> = Vec::new();
+        assert_eq!(errors, expected_errors);
+
+        assert_eq!(
+            compare(path_a.clone(), path_b.clone()),
+            vec![
+                CompareResult::MissingInDirA(EntryInfo {
+                    path: "file_only_in_b.txt".to_string()
+                }),
+                CompareResult::MissingInDirA(EntryInfo {
+                    path: "subdir_only_in_b".to_string()
+                }),
+                // This one should be gone, as the file was copied from dirA to dirB
+                // CompareResult::MissingInDirB(EntryInfo {
+                //     path: "file_only_in_a.txt".to_string()
+                // }),
+                CompareResult::MissingInDirB(EntryInfo {
+                    path: "subdir_only_in_a".to_string()
+                }),
+                CompareResult::DifferingContent(EntryInfo {
+                    path: "differing_content.txt".to_string()
+                }),
+                CompareResult::TypeMismatch(EntryTypeMismatch {
+                    path: "differing_type.txt".to_string(),
+                    type_in_dir_a: EntryType::File,
+                    type_in_dir_b: EntryType::Directory
+                }),
+            ]
+        );
+
+        Ok(())
     }
 }
