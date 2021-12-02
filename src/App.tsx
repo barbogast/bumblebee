@@ -104,11 +104,22 @@ const columns: ColumnsType<TableData> = [
   },
 ];
 
+const isAutoFixable = (type: Reason) => type !== 'TypeMismatch';
+
+const rowSelection = {
+  getCheckboxProps: (record: TableData) => ({
+    disabled: !isAutoFixable(record.type),
+    name: record.path,
+    title: isAutoFixable(record.type) ? '' : `Can't be fixed automatically.`,
+  }),
+};
+
 function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
   const [result, setResult] = useState<CompareResult | void>();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   console.log(result);
 
   const errors: TableData[] = result
@@ -213,17 +224,32 @@ function App() {
                   console.log('invoke');
 
                   invoke<CompareResult>('compare', { pathA, pathB })
-                    .then((message) => setResult(message))
+                    .then((message) => {
+                      setResult(message);
+                      setSelectedRowKeys(message.map((r) => (isAutoFixable(r.type) ? r.path : '')));
+                    })
                     .catch((e) => console.error(e));
                 }}
               >
                 Compare
               </button>
             </div>
-            {result && <Table dataSource={tableData} columns={columns} />}
+            {result && (
+              <Table
+                dataSource={tableData}
+                columns={columns}
+                rowSelection={{
+                  selectedRowKeys,
+                  // @ts-expect-error: Types say that number[] will be passed, even though it actually is string.
+                  onChange: (selection) => setSelectedRowKeys(selection),
+                  ...rowSelection,
+                }}
+                pagination={{ size: 'small', hideOnSinglePage: true }}
+              />
+            )}
           </div>
         </Content>
-        <Footer style={{ textAlign: 'center' }}>Ant Design ©2018 Created by Ant UED</Footer>
+        <Footer style={{ textAlign: 'center' }}>XAnt Design ©2018 Created by Ant UED</Footer>
       </Layout>
     </Layout>
   );
