@@ -216,14 +216,14 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
 }
 
 #[tauri::command]
-fn copy(path_source: String, path_target: String, sub_paths: Vec<String>) -> Vec<ErrorInfo> {
-    dbg!(&path_source, &path_target, &sub_paths);
+fn copy(source_path: String, target_path: String, sub_paths: Vec<String>) -> Vec<ErrorInfo> {
+    dbg!(&source_path, &target_path, &sub_paths);
     sub_paths
         .into_iter()
         .filter_map(|path| {
             fs::copy(
-                Path::new(&path_source).join(&path),
-                Path::new(&path_target).join(&path),
+                Path::new(&source_path).join(&path),
+                Path::new(&target_path).join(&path),
             )
             .map_err(|error| ErrorInfo {
                 message: error.to_string(),
