@@ -62,7 +62,7 @@ impl CompareResult {
     }
 }
 
-fn get_directory_content_recursively(dir: &String) -> (HashSet<String>, Vec<CompareResult>) {
+fn get_directory_content_recursively(dir: &str) -> (HashSet<String>, Vec<CompareResult>) {
     let mut filenames: HashSet<String> = HashSet::new();
     let mut errors: Vec<CompareResult> = Vec::new();
 
@@ -72,7 +72,7 @@ fn get_directory_content_recursively(dir: &String) -> (HashSet<String>, Vec<Comp
                 let error = CompareResult::CouldNotReadDirectory(ErrorInfo {
                     path: why
                         .path()
-                        .unwrap_or(Path::new(""))
+                        .unwrap_or_else(|| Path::new(""))
                         .to_string_lossy()
                         .to_string(),
                     message: why.to_string(),
@@ -136,17 +136,16 @@ fn get_entry_type(path: &Path) -> EntryType {
         EntryType::Directory
     } else if path.is_file() {
         EntryType::File
+    } else {
+        EntryType::Unknown
     }
     // TODO: is_symlink() is only allowed in nightly...
     // else if path.is_symlink() { EntryType::Link }
-    else {
-        EntryType::Unknown
-    }
 }
 
 fn compare_entry(
-    dir_a_path: &String,
-    dir_b_path: &String,
+    dir_a_path: &str,
+    dir_b_path: &str,
     sub_path: String,
 ) -> Result<(), CompareResult> {
     let path_a = Path::new(&dir_a_path).join(&sub_path);
@@ -166,12 +165,12 @@ fn compare_entry(
         })?;
         if hash_a != hash_b {
             return Err(CompareResult::DifferingContent(EntryInfo {
-                path: sub_path.clone(),
+                path: sub_path,
             }));
         }
     } else if !(path_a.is_dir() && path_b.is_dir()) {
         return Err(CompareResult::TypeMismatch(EntryTypeMismatch {
-            path: sub_path.clone(),
+            path: sub_path,
             type_in_dir_a: get_entry_type(&path_a),
             type_in_dir_b: get_entry_type(&path_b),
         }));
@@ -182,10 +181,10 @@ fn compare_entry(
 fn compare_directory_contents<'a>(
     dir_a_content: &'a HashSet<String>,
     dir_b_content: &'a HashSet<String>,
-    dir_a_path: &'a String,
-    dir_b_path: &'a String,
+    dir_a_path: &'a str,
+    dir_b_path: &'a str,
 ) -> impl Iterator<Item = CompareResult> + 'a {
-    let present_in_both = dir_a_content.intersection(&dir_b_content);
+    let present_in_both = dir_a_content.intersection(dir_b_content);
     present_in_both.filter_map(|path| compare_entry(dir_a_path, dir_b_path, path.to_string()).err())
 }
 
@@ -193,13 +192,11 @@ fn find_missing_entries<'a>(
     dir_a_content: &'a HashSet<String>,
     dir_b_content: &'a HashSet<String>,
 ) -> Box<dyn Iterator<Item = CompareResult> + 'a> {
-    let missing_in_dir_a =
-        remove_subdirectories(dir_b_content.difference(&dir_a_content).into_iter())
-            .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
+    let missing_in_dir_a = remove_subdirectories(dir_b_content.difference(dir_a_content))
+        .map(|path| CompareResult::MissingInDirA(EntryInfo { path: path.clone() }));
 
-    let missing_in_dir_b =
-        remove_subdirectories(dir_a_content.difference(&dir_b_content).into_iter())
-            .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
+    let missing_in_dir_b = remove_subdirectories(dir_a_content.difference(dir_b_content))
+        .map(|path| CompareResult::MissingInDirB(EntryInfo { path: path.clone() }));
 
     Box::new(missing_in_dir_a.chain(missing_in_dir_b))
 }
@@ -261,7 +258,6 @@ fn main() {
 
 mod tests {
     use super::*;
-    use fs_extra;
     use tempfile::tempdir;
 
     fn call_structure_compare(path: &str) -> Vec<CompareResult> {
@@ -459,7 +455,7 @@ mod tests {
         assert_eq!(errors, expected_errors);
 
         assert_eq!(
-            compare(path_a.clone(), path_b.clone()),
+            compare(path_a, path_b),
             vec![
                 CompareResult::MissingInDirA(EntryInfo {
                     path: "file_only_in_b.txt".to_string()
