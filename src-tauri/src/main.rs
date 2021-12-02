@@ -390,81 +390,28 @@ mod tests {
         //   3. Run copy() for one of the differences
         //   4. Run the comparison again to assert that the expected difference disappeared
         // Note that 2, 3 and 4 are all executed on the copied directoy in /tmp
-        let dir = create_test_directory("test/00_all_cases")?;
-        let path_a = dir
-            .path()
-            .join("00_all_cases")
-            .join("dirA")
-            .to_string_lossy()
-            .to_string();
-        let path_b = dir
-            .path()
-            .join("00_all_cases")
-            .join("dirB")
-            .to_string_lossy()
-            .to_string();
+        let dir = create_test_directory("test/03_dirB_lacks_file")?;
+        let base_path = dir.path().join("03_dirB_lacks_file");
+        let path_a = base_path.join("dirA").to_string_lossy().to_string();
+        let path_b = base_path.join("dirB").to_string_lossy().to_string();
 
         assert_eq!(
             compare(path_a.clone(), path_b.clone()),
-            vec![
-                CompareResult::MissingInDirA(EntryInfo {
-                    path: "file_only_in_b.txt".to_string(),
-                }),
-                CompareResult::MissingInDirA(EntryInfo {
-                    path: "subdir_only_in_b".to_string(),
-                }),
-                CompareResult::MissingInDirB(EntryInfo {
-                    path: "file_only_in_a.txt".to_string(),
-                }),
-                CompareResult::MissingInDirB(EntryInfo {
-                    path: "subdir_only_in_a".to_string(),
-                }),
-                CompareResult::DifferingContent(EntryInfo {
-                    path: "differing_content.txt".to_string(),
-                }),
-                CompareResult::TypeMismatch(EntryTypeMismatch {
-                    path: "differing_type.txt".to_string(),
-                    type_in_dir_a: EntryType::File,
-                    type_in_dir_b: EntryType::Directory,
-                }),
-            ]
+            vec![CompareResult::MissingInDirB(EntryInfo {
+                path: "file1.txt".to_string(),
+            }),]
         );
 
         let errors = copy(
             path_a.clone(),
             path_b.clone(),
-            vec!["file_only_in_a.txt".to_string()],
+            vec!["file1.txt".to_string()],
         );
 
         let expected_errors: Vec<ErrorInfo> = Vec::new();
         assert_eq!(errors, expected_errors);
 
-        assert_eq!(
-            compare(path_a, path_b),
-            vec![
-                CompareResult::MissingInDirA(EntryInfo {
-                    path: "file_only_in_b.txt".to_string()
-                }),
-                CompareResult::MissingInDirA(EntryInfo {
-                    path: "subdir_only_in_b".to_string()
-                }),
-                // This one should be gone, as the file was copied from dirA to dirB
-                // CompareResult::MissingInDirB(EntryInfo {
-                //     path: "file_only_in_a.txt".to_string()
-                // }),
-                CompareResult::MissingInDirB(EntryInfo {
-                    path: "subdir_only_in_a".to_string()
-                }),
-                CompareResult::DifferingContent(EntryInfo {
-                    path: "differing_content.txt".to_string()
-                }),
-                CompareResult::TypeMismatch(EntryTypeMismatch {
-                    path: "differing_type.txt".to_string(),
-                    type_in_dir_a: EntryType::File,
-                    type_in_dir_b: EntryType::Directory
-                }),
-            ]
-        );
+        assert_eq!(compare(path_a, path_b), vec![]);
 
         Ok(())
     }
