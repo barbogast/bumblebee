@@ -4,10 +4,11 @@
 )]
 
 use data_encoding::HEXUPPER;
+use fs_extra;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::collections::HashSet;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
 use walkdir::WalkDir;
@@ -218,12 +219,15 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
 #[tauri::command]
 fn copy(source_path: String, target_path: String, sub_paths: Vec<String>) -> Vec<ErrorInfo> {
     dbg!(&source_path, &target_path, &sub_paths);
+    let mut options = fs_extra::dir::CopyOptions::new();
+    options.overwrite = true;
     sub_paths
         .into_iter()
         .filter_map(|path| {
-            fs::copy(
-                Path::new(&source_path).join(&path),
-                Path::new(&target_path).join(&path),
+            fs_extra::copy_items(
+                &[Path::new(&source_path).join(&path)],
+                &Path::new(&target_path),
+                &options,
             )
             .map_err(|error| ErrorInfo {
                 message: error.to_string(),
@@ -382,14 +386,14 @@ mod tests {
         );
     }
 
+    // To test copying files we:
+    //   1. Copy the folder of "00_all_cases" to a new folder in /tmp
+    //   2. Make sure that dirA and dirB contain the expected differences
+    //   3. Run copy() for one of the differences
+    //   4. Run the comparison again to assert that the expected difference disappeared
+    // Note that 2, 3 and 4 are all executed on the copied directoy in /tmp
     #[test]
-    fn test_copy_files() -> Result<(), fs_extra::error::Error> {
-        // To test copying files we:
-        //   1. Copy the folder of "00_all_cases" to a new folder in /tmp
-        //   2. Make sure that dirA and dirB contain the expected differences
-        //   3. Run copy() for one of the differences
-        //   4. Run the comparison again to assert that the expected difference disappeared
-        // Note that 2, 3 and 4 are all executed on the copied directoy in /tmp
+    fn test_copy_one_file() -> Result<(), fs_extra::error::Error> {
         let dir = create_test_directory("test/03_dirB_lacks_file")?;
         let base_path = dir.path().join("03_dirB_lacks_file");
         let path_a = base_path.join("dirA").to_string_lossy().to_string();
@@ -407,6 +411,75 @@ mod tests {
             path_b.clone(),
             vec!["file1.txt".to_string()],
         );
+
+        let expected_errors: Vec<ErrorInfo> = Vec::new();
+        assert_eq!(errors, expected_errors);
+
+        assert_eq!(compare(path_a, path_b), vec![]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_multiple_files() -> Result<(), fs_extra::error::Error> {
+        let dir = create_test_directory("test/09_3_wrong_files")?;
+        let base_path = dir.path().join("09_3_wrong_files");
+        let path_a = base_path.join("dirA").to_string_lossy().to_string();
+        let path_b = base_path.join("dirB").to_string_lossy().to_string();
+
+        assert_eq!(
+            compare(path_a.clone(), path_b.clone()),
+            vec![
+                CompareResult::MissingInDirB(EntryInfo {
+                    path: "file_only_in_a.txt".to_string(),
+                }),
+                CompareResult::DifferingContent(EntryInfo {
+                    path: "differing_content.txt".to_string(),
+                }),
+                CompareResult::DifferingContent(EntryInfo {
+                    path: "differing_content2.txt".to_string(),
+                })
+            ]
+        );
+
+        // Let's copy file_only_in_a.txt and differing_content.txt but not differing_content2.txt
+        let errors = copy(
+            path_a.clone(),
+            path_b.clone(),
+            vec![
+                "file_only_in_a.txt".to_string(),
+                "differing_content.txt".to_string(),
+            ],
+        );
+
+        let expected_errors: Vec<ErrorInfo> = Vec::new();
+        assert_eq!(errors, expected_errors);
+
+        assert_eq!(
+            compare(path_a, path_b),
+            vec![CompareResult::DifferingContent(EntryInfo {
+                path: "differing_content2.txt".to_string(),
+            })]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_directory() -> Result<(), fs_extra::error::Error> {
+        let dir = create_test_directory("test/04_dirA_lacks_sub_directory")?;
+        let base_path = dir.path().join("04_dirA_lacks_sub_directory");
+        let path_a = base_path.join("dirA").to_string_lossy().to_string();
+        let path_b = base_path.join("dirB").to_string_lossy().to_string();
+
+        assert_eq!(
+            compare(path_a.clone(), path_b.clone()),
+            vec![CompareResult::MissingInDirA(EntryInfo {
+                path: String::from("subdir2")
+            })]
+        );
+
+        let errors = copy(path_b.clone(), path_a.clone(), vec!["subdir2".to_string()]);
 
         let expected_errors: Vec<ErrorInfo> = Vec::new();
         assert_eq!(errors, expected_errors);
