@@ -1,188 +1,24 @@
 import { useState } from 'react';
-import { Layout, Menu, Table, Alert, Button } from 'antd';
+import { Layout, Menu, Button } from 'antd';
 import { DoubleRightOutlined, DoubleLeftOutlined } from '@ant-design/icons';
 import './App.css';
 import { open } from '@tauri-apps/api/dialog';
 import { invoke } from '@tauri-apps/api/tauri';
-import { ColumnsType } from 'antd/es/table';
 
 import CopyModal, { useModalState } from './CopyModal';
-
-type EntryType = 'Directory' | 'File' | 'Link' | 'Unknown';
-
-type CompareResult = (
-  | {
-      type: 'CouldNotReadDirectory';
-      path: string;
-      message: string;
-    }
-  | {
-      type: 'CouldNotCalculateHash';
-      path: string;
-      message: string;
-    }
-  | {
-      type: 'MissingInDirA';
-      path: string;
-    }
-  | {
-      type: 'MissingInDirB';
-      path: string;
-    }
-  | {
-      type: 'DifferingContent';
-      path: string;
-    }
-  | {
-      type: 'TypeMismatch';
-      path: string;
-      type_in_dir_a: EntryType;
-      type_in_dir_b: EntryType;
-    }
-)[];
-
-type Reason =
-  | 'CouldNotReadDirectory'
-  | 'CouldNotCalculateHash'
-  | 'MissingInDirA'
-  | 'MissingInDirB'
-  | 'DifferingContent'
-  | 'TypeMismatch';
-
-type TableData = {
-  key: string;
-  path: string;
-  type: Reason;
-};
+import ComparisonTable, { useTableState } from './ComparisonTable';
+import { CompareResult } from './types';
 
 const { Header, Content, Footer, Sider } = Layout;
-
-const reasonToType = (record: TableData) => {
-  const { type } = record;
-  switch (type) {
-    case 'CouldNotCalculateHash':
-      return 'error';
-    case 'CouldNotReadDirectory':
-      return 'error';
-    case 'MissingInDirA':
-      return 'error';
-    case 'MissingInDirB':
-      return 'error';
-    case 'DifferingContent':
-      return 'warning';
-    case 'TypeMismatch':
-      return 'error';
-    default: {
-      const exhaustiveCheck: never = type;
-      throw new Error(`Unhandled case: ${exhaustiveCheck}`);
-    }
-  }
-};
-
-const renderTableCell = (text: string, record: TableData) => {
-  return text ? (
-    <Alert type={reasonToType(record)} message={text}>
-      {record.type}
-    </Alert>
-  ) : null;
-};
-
-const columns: ColumnsType<TableData> = [
-  {
-    title: 'Path',
-    dataIndex: 'path',
-    key: 'path',
-  },
-  {
-    title: 'A',
-    dataIndex: 'dirA',
-    key: 'dirA',
-    render: renderTableCell,
-  },
-  {
-    title: 'B',
-    dataIndex: 'dirB',
-    key: 'dirB',
-    render: renderTableCell,
-  },
-];
-
-const isAutoFixable = (type: Reason) => type !== 'TypeMismatch';
-
-const rowSelection = {
-  getCheckboxProps: (record: TableData) => ({
-    disabled: !isAutoFixable(record.type),
-    name: record.path,
-    title: isAutoFixable(record.type) ? '' : `Can't be fixed automatically.`,
-  }),
-};
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
-  const [result, setResult] = useState<CompareResult | void>();
-  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const tableApi = useTableState();
   const modalApi = useModalState();
   console.log(modalApi.state);
-  console.log(result);
-
-  const errors: TableData[] = result
-    ? result.map((res) => {
-        const { type } = res;
-        switch (type) {
-          case 'CouldNotReadDirectory':
-          case 'CouldNotCalculateHash': {
-            return {
-              key: res.path,
-              path: res.path,
-              type: res.type,
-              dirA: res.message,
-            };
-          }
-          case 'MissingInDirA': {
-            return {
-              key: res.path,
-              path: res.path,
-              type: res.type,
-              dirA: 'File  missing',
-            };
-          }
-          case 'MissingInDirB': {
-            return {
-              key: res.path,
-              path: res.path,
-              type: res.type,
-              dirA: 'File missing',
-            };
-          }
-          case 'DifferingContent': {
-            return {
-              key: res.path,
-              path: res.path,
-              type: res.type,
-              dirA: 'Differing content',
-              dirB: 'Differing content',
-            };
-          }
-          case 'TypeMismatch': {
-            return {
-              key: res.path,
-              path: res.path,
-              type: res.type,
-              dirA: res.type_in_dir_a,
-              dirB: res.type_in_dir_b,
-            };
-          }
-          default: {
-            const exhaustiveCheck: never = type;
-            throw new Error(`Unhandled case: ${exhaustiveCheck}`);
-          }
-        }
-      })
-    : [];
-
-  const tableData = errors;
+  console.log(tableApi);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -230,8 +66,7 @@ function App() {
 
                   invoke<CompareResult>('compare', { pathA, pathB })
                     .then((message) => {
-                      setResult(message);
-                      setSelectedRowKeys(message.map((r) => (isAutoFixable(r.type) ? r.path : '')));
+                      tableApi.setComparisonResult(message);
                     })
                     .catch((e) => console.error(e));
                 }}
@@ -239,27 +74,17 @@ function App() {
                 Compare
               </button>
             </div>
-            {result && (
-              <Table
-                dataSource={tableData}
-                columns={columns}
-                rowSelection={{
-                  selectedRowKeys,
-                  // @ts-expect-error: Types say that number[] will be passed, even though it actually is string.
-                  onChange: (selection) => setSelectedRowKeys(selection),
-                  ...rowSelection,
-                }}
-                pagination={{ size: 'small', hideOnSinglePage: true }}
-              />
-            )}
-            {selectedRowKeys.length ? (
+
+            <ComparisonTable tableApi={tableApi} />
+
+            {tableApi.selectedRows.length ? (
               <div style={{ padding: 10 }}>
                 <Button
                   type='primary'
                   size='large'
                   icon={<DoubleRightOutlined />}
                   style={{ marginRight: 10 }}
-                  onClick={() => modalApi.openModal(pathA, pathB, selectedRowKeys)}
+                  onClick={() => modalApi.openModal(pathA, pathB, tableApi.selectedRows)}
                 >
                   Copy selected files from directory A to directory B...
                 </Button>
@@ -267,7 +92,7 @@ function App() {
                   type='primary'
                   size='large'
                   icon={<DoubleLeftOutlined />}
-                  onClick={() => modalApi.openModal(pathB, pathA, selectedRowKeys)}
+                  onClick={() => modalApi.openModal(pathB, pathA, tableApi.selectedRows)}
                 >
                   Copy selected files from directory B to directory A...
                 </Button>
