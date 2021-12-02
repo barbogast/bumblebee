@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { Layout, Menu, Table, Alert } from 'antd';
+import { Layout, Menu, Table, Alert, Button, Modal } from 'antd';
+import { DoubleRightOutlined, DoubleLeftOutlined } from '@ant-design/icons';
 import './App.css';
 import { open } from '@tauri-apps/api/dialog';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ColumnsType } from 'antd/es/table';
 
 type EntryType = 'Directory' | 'File' | 'Link' | 'Unknown';
+
+type ErrorInfo = {
+  message: string;
+  path: string;
+};
 
 type CompareResult = (
   | {
@@ -114,12 +120,44 @@ const rowSelection = {
   }),
 };
 
+type ModalState = {
+  sourcePath: string;
+  targetPath: string;
+  selectedEntries: string[];
+  copyErrors: ErrorInfo[];
+};
+
+const useModalState = () => {
+  const [state, setState] = useState<ModalState | void>();
+
+  const openModal = (sourcePath: string, targetPath: string, selectedEntries: string[]) =>
+    setState({
+      sourcePath,
+      targetPath,
+      selectedEntries,
+      copyErrors: [],
+    });
+
+  const closeModal = () => {
+    setState();
+  };
+
+  const setCopyErrors = (copyErrors: ErrorInfo[]) => {
+    if (!state) return;
+    setState({ ...state, copyErrors });
+  };
+
+  return { openModal, closeModal, modalState: state, setCopyErrors };
+};
+
 function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [pathA, setPathA] = useState<string>('');
   const [pathB, setPathB] = useState<string>('');
   const [result, setResult] = useState<CompareResult | void>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const { openModal, closeModal, modalState, setCopyErrors } = useModalState();
+  console.log(modalState);
   console.log(result);
 
   const errors: TableData[] = result
@@ -247,6 +285,72 @@ function App() {
                 pagination={{ size: 'small', hideOnSinglePage: true }}
               />
             )}
+            {selectedRowKeys.length ? (
+              <div style={{ padding: 10 }}>
+                <Button
+                  type='primary'
+                  size='large'
+                  icon={<DoubleRightOutlined />}
+                  style={{ marginRight: 10 }}
+                  onClick={() => openModal(pathA, pathB, selectedRowKeys)}
+                >
+                  Copy selected files from directory A to directory B...
+                </Button>
+                <Button
+                  type='primary'
+                  size='large'
+                  icon={<DoubleLeftOutlined />}
+                  onClick={() => openModal(pathB, pathA, selectedRowKeys)}
+                >
+                  Copy selected files from directory B to directory A...
+                </Button>
+              </div>
+            ) : null}
+            {modalState ? (
+              <Modal
+                title='Title'
+                visible
+                onOk={() =>
+                  invoke<ErrorInfo[]>('copy', {
+                    pathSource: modalState.sourcePath,
+                    pathTarget: modalState.targetPath,
+                    subPaths: selectedRowKeys,
+                  })
+                    .then((errors) => {
+                      if (!errors.length) {
+                        closeModal();
+                      } else {
+                        setCopyErrors(errors);
+                      }
+                    })
+                    .catch((e) => setCopyErrors([{ path: '', message: e }]))
+                }
+                onCancel={() => {
+                  closeModal();
+                }}
+              >
+                Copy/override the following paths from {modalState.sourcePath} to{' '}
+                {modalState.targetPath}
+                {selectedRowKeys.map((e) => (
+                  <p>{e}</p>
+                ))}
+                {modalState.copyErrors.length ? (
+                  <Alert
+                    type='error'
+                    message={
+                      <>
+                        While copying / overriding the following errors occured:
+                        {modalState.copyErrors.map((e) => (
+                          <p>
+                            {e.path ? e.path + ' : ' : null} {e.message}
+                          </p>
+                        ))}
+                      </>
+                    }
+                  />
+                ) : null}
+              </Modal>
+            ) : null}
           </div>
         </Content>
         <Footer style={{ textAlign: 'center' }}>XAnt Design ©2018 Created by Ant UED</Footer>

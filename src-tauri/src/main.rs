@@ -49,19 +49,6 @@ enum CompareResult {
     TypeMismatch(EntryTypeMismatch),
 }
 
-impl CompareResult {
-    fn path(&self) -> &String {
-        match self {
-            CompareResult::CouldNotReadDirectory(s) => &s.path,
-            CompareResult::CouldNotCalculateHash(s) => &s.path,
-            CompareResult::MissingInDirA(s) => &s.path,
-            CompareResult::MissingInDirB(s) => &s.path,
-            CompareResult::DifferingContent(s) => &s.path,
-            CompareResult::TypeMismatch(s) => &s.path,
-        }
-    }
-}
-
 fn get_directory_content_recursively(dir: &str) -> (HashSet<String>, Vec<CompareResult>) {
     let mut filenames: HashSet<String> = HashSet::new();
     let mut errors: Vec<CompareResult> = Vec::new();
@@ -229,10 +216,10 @@ fn compare(path_a: String, path_b: String) -> Vec<CompareResult> {
 }
 
 #[tauri::command]
-fn copy(path_source: String, path_target: String, sub_paths: Vec<CompareResult>) -> Vec<ErrorInfo> {
+fn copy(path_source: String, path_target: String, sub_paths: Vec<String>) -> Vec<ErrorInfo> {
+    dbg!(&path_source, &path_target, &sub_paths);
     sub_paths
         .into_iter()
-        .map(|path| path.path().clone())
         .filter_map(|path| {
             fs::copy(
                 Path::new(&path_source).join(&path),
@@ -446,9 +433,7 @@ mod tests {
         let errors = copy(
             path_a.clone(),
             path_b.clone(),
-            vec![CompareResult::MissingInDirB(EntryInfo {
-                path: "file_only_in_a.txt".to_string(),
-            })],
+            vec!["file_only_in_a.txt".to_string()],
         );
 
         let expected_errors: Vec<ErrorInfo> = Vec::new();
