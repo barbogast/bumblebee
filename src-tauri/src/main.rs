@@ -84,7 +84,7 @@ fn get_directory_content_recursively(dir: &str) -> (HashSet<String>, Vec<Compare
                     .path()
                     .strip_prefix(&dir)
                     // This should never panic as the path should always start with the base directory
-                    .expect("Path doesn't sart with base directory")
+                    .expect("Path doesn't start with base directory")
                     .to_string_lossy()
                     .to_string();
                 filenames.insert(f_name);
