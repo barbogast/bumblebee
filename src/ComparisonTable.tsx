@@ -24,7 +24,7 @@ const reasonToType = (record: TableData) => {
     case 'DifferingContent':
       return 'warning';
     case 'TypeMismatch':
-      return 'error';
+      return 'warning';
     default: {
       const exhaustiveCheck: never = type;
       throw new Error(`Unhandled case: ${exhaustiveCheck}`);
@@ -115,7 +115,7 @@ const ComparisonTable = ({ tableApi }: Props) => {
               key: res.path,
               path: res.path,
               type: res.type,
-              dirA: 'File  missing',
+              dirA: 'Missing',
             };
           }
           case 'MissingInDirB': {
@@ -123,7 +123,7 @@ const ComparisonTable = ({ tableApi }: Props) => {
               key: res.path,
               path: res.path,
               type: res.type,
-              dirA: 'File missing',
+              dirB: 'Missing',
             };
           }
           case 'DifferingContent': {
