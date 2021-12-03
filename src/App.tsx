@@ -86,7 +86,7 @@ function App() {
                   style={{ marginRight: 10 }}
                   onClick={() => modalApi.openModal(pathA, pathB, tableApi.selectedRows)}
                 >
-                  Copy selected files from directory A to directory B...
+                  Copy A to B...
                 </Button>
                 <Button
                   type='primary'
@@ -94,7 +94,7 @@ function App() {
                   icon={<DoubleLeftOutlined />}
                   onClick={() => modalApi.openModal(pathB, pathA, tableApi.selectedRows)}
                 >
-                  Copy selected files from directory B to directory A...
+                  Copy B to A...
                 </Button>
               </div>
             ) : null}
