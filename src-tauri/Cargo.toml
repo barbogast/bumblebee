@@ -22,10 +22,10 @@ data-encoding = "2.3.2"
 ring = "0.16.20"
 serde = { version = "1.0.130", features = ["derive"] }
 tauri = { version = "1.0.0-beta.8", features = ["api-all"] }
+fs_extra = "1.2.0"
 
 [dev-dependencies]
 tempfile = "3.2.0"
-fs_extra = "1.2.0"
 
 [features]
 default = [ "custom-protocol" ]
