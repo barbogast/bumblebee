@@ -7,6 +7,7 @@ use data_encoding::HEXUPPER;
 use fs_extra;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -39,7 +40,7 @@ struct ErrorInfo {
     message: String,
 }
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 enum CompareResult {
     CouldNotReadDirectory(ErrorInfo),
@@ -48,6 +49,30 @@ enum CompareResult {
     MissingInDirB(EntryInfo),
     DifferingContent(EntryInfo),
     TypeMismatch(EntryTypeMismatch),
+}
+
+impl CompareResult {
+    fn path(&self) -> &String {
+        match self {
+            CompareResult::CouldNotReadDirectory(r) => &r.path,
+            CompareResult::CouldNotCalculateHash(r) => &r.path,
+            CompareResult::MissingInDirA(r) => &r.path,
+            CompareResult::MissingInDirB(r) => &r.path,
+            CompareResult::DifferingContent(r) => &r.path,
+            CompareResult::TypeMismatch(r) => &r.path,
+        }
+    }
+}
+impl PartialOrd for CompareResult {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.path().cmp(other.path()))
+    }
+}
+
+impl Ord for CompareResult {
+    fn cmp(&self, other: &CompareResult) -> Ordering {
+        self.path().cmp(other.path())
+    }
 }
 
 fn get_directory_content_recursively(dir: &str) -> (HashSet<String>, Vec<CompareResult>) {
@@ -430,15 +455,15 @@ mod tests {
         assert_eq!(
             compare(path_a.clone(), path_b.clone()),
             vec![
-                CompareResult::MissingInDirB(EntryInfo {
-                    path: "file_only_in_a.txt".to_string(),
-                }),
                 CompareResult::DifferingContent(EntryInfo {
                     path: "differing_content.txt".to_string(),
                 }),
                 CompareResult::DifferingContent(EntryInfo {
                     path: "differing_content2.txt".to_string(),
-                })
+                }),
+                CompareResult::MissingInDirB(EntryInfo {
+                    path: "file_only_in_a.txt".to_string(),
+                }),
             ]
         );
 
