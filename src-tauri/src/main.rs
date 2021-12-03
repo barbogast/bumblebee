@@ -9,9 +9,11 @@ use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::fs::metadata;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
+use std::time::SystemTime;
 use walkdir::WalkDir;
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
@@ -35,6 +37,13 @@ struct EntryInfo {
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
+struct FileInfo {
+    path: String,
+    last_modified_in_dir_a: u64, // seconds since UNIX_EPOCH
+    last_modified_in_dir_b: u64, // seconds since UNIX_EPOCH
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 struct ErrorInfo {
     path: String,
     message: String,
@@ -45,9 +54,10 @@ struct ErrorInfo {
 enum CompareResult {
     CouldNotReadDirectory(ErrorInfo),
     CouldNotCalculateHash(ErrorInfo),
+    CouldNotGetLastModified(ErrorInfo),
     MissingInDirA(EntryInfo),
     MissingInDirB(EntryInfo),
-    DifferingContent(EntryInfo),
+    DifferingContent(FileInfo),
     TypeMismatch(EntryTypeMismatch),
 }
 
@@ -56,6 +66,7 @@ impl CompareResult {
         match self {
             CompareResult::CouldNotReadDirectory(r) => &r.path,
             CompareResult::CouldNotCalculateHash(r) => &r.path,
+            CompareResult::CouldNotGetLastModified(r) => &r.path,
             CompareResult::MissingInDirA(r) => &r.path,
             CompareResult::MissingInDirB(r) => &r.path,
             CompareResult::DifferingContent(r) => &r.path,
@@ -156,6 +167,16 @@ fn get_entry_type(path: &Path) -> EntryType {
     // else if path.is_symlink() { EntryType::Link }
 }
 
+fn get_last_modified_of_file(path: &Path) -> Result<u64, io::Error> {
+    let metadata_for_file_in_dir_a = metadata(path)?;
+    let seconds_since_epoch = metadata_for_file_in_dir_a
+        .modified()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Clock may have gone backwards")
+        .as_secs();
+    Ok(seconds_since_epoch)
+}
+
 fn compare_entry(
     dir_a_path: &str,
     dir_b_path: &str,
@@ -177,8 +198,23 @@ fn compare_entry(
             })
         })?;
         if hash_a != hash_b {
-            return Err(CompareResult::DifferingContent(EntryInfo {
+            let last_modified_in_dir_a = get_last_modified_of_file(&path_a).map_err(|why| {
+                CompareResult::CouldNotGetLastModified(ErrorInfo {
+                    path: path_a.to_string_lossy().to_string(),
+                    message: why.to_string(),
+                })
+            })?;
+            let last_modified_in_dir_b = get_last_modified_of_file(&path_b).map_err(|why| {
+                CompareResult::CouldNotGetLastModified(ErrorInfo {
+                    path: path_b.to_string_lossy().to_string(),
+                    message: why.to_string(),
+                })
+            })?;
+
+            return Err(CompareResult::DifferingContent(FileInfo {
                 path: sub_path,
+                last_modified_in_dir_a,
+                last_modified_in_dir_b,
             }));
         }
     } else if !(path_a.is_dir() && path_b.is_dir()) {
@@ -383,8 +419,10 @@ mod tests {
     fn t_06_different_text_content() {
         assert_eq!(
             call_content_compare("06_different_text_content"),
-            vec![CompareResult::DifferingContent(EntryInfo {
-                path: String::from("file1.txt")
+            vec![CompareResult::DifferingContent(FileInfo {
+                path: String::from("file1.txt"),
+                last_modified_in_dir_a: 1637774171,
+                last_modified_in_dir_b: 1637774802,
             })]
         );
     }
@@ -393,8 +431,10 @@ mod tests {
     fn t_07_different_binary_content() {
         assert_eq!(
             call_content_compare("07_different_binary_content"),
-            vec![CompareResult::DifferingContent(EntryInfo {
-                path: String::from("file1.jpeg")
+            vec![CompareResult::DifferingContent(FileInfo {
+                path: String::from("file1.jpeg"),
+                last_modified_in_dir_a: 1637774351,
+                last_modified_in_dir_b: 1637774396,
             })]
         );
     }
@@ -455,11 +495,15 @@ mod tests {
         assert_eq!(
             compare(path_a.clone(), path_b.clone()),
             vec![
-                CompareResult::DifferingContent(EntryInfo {
+                CompareResult::DifferingContent(FileInfo {
                     path: "differing_content.txt".to_string(),
+                    last_modified_in_dir_a: 1638465426,
+                    last_modified_in_dir_b: 1638465426,
                 }),
-                CompareResult::DifferingContent(EntryInfo {
+                CompareResult::DifferingContent(FileInfo {
                     path: "differing_content2.txt".to_string(),
+                    last_modified_in_dir_a: 1638465647,
+                    last_modified_in_dir_b: 1638465654,
                 }),
                 CompareResult::MissingInDirB(EntryInfo {
                     path: "file_only_in_a.txt".to_string(),
@@ -480,13 +524,11 @@ mod tests {
         let expected_errors: Vec<ErrorInfo> = Vec::new();
         assert_eq!(errors, expected_errors);
 
-        assert_eq!(
-            compare(path_a, path_b),
-            vec![CompareResult::DifferingContent(EntryInfo {
-                path: "differing_content2.txt".to_string(),
-            })]
-        );
-
+        let comparison_result = compare(path_a, path_b);
+        // We cannot just compare the result of compare() as the last_modified_* fields are expected
+        // to be different
+        assert_eq!(comparison_result.len(), 1);
+        assert_eq!(comparison_result[0].path(), "differing_content2.txt");
         Ok(())
     }
 

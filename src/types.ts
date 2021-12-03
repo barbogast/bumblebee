@@ -22,6 +22,8 @@ export type CompareResult = (
   | {
       type: 'DifferingContent';
       path: string;
+      last_modified_in_dir_a: number;
+      last_modified_in_dir_b: number;
     }
   | {
       type: 'TypeMismatch';

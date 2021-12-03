@@ -131,8 +131,12 @@ const ComparisonTable = ({ tableApi }: Props) => {
               key: res.path,
               path: res.path,
               type: res.type,
-              dirA: 'Differing content',
-              dirB: 'Differing content',
+              dirA: `Differing content (${
+                res.last_modified_in_dir_a > res.last_modified_in_dir_b ? 'newer' : 'older'
+              })`,
+              dirB: `Differing content (${
+                res.last_modified_in_dir_a < res.last_modified_in_dir_b ? 'newer' : 'older'
+              })`,
             };
           }
           case 'TypeMismatch': {
