@@ -16,6 +16,14 @@ type ModalState = {
 
 type ModalApi = ReturnType<typeof useModalState>;
 
+const Path = ({ children }: { children: React.ReactNode }) => (
+  <code
+    style={{ fontSize: 12, background: 'lightgrey', padding: 5, borderRadius: 2, display: 'block' }}
+  >
+    {children}
+  </code>
+);
+
 export const useModalState = () => {
   const [state, setState] = useState<ModalState | void>();
 
@@ -60,9 +68,14 @@ const CopyModal = ({ modalApi }: Props) => {
 
   return (
     <Modal title='Title' visible onOk={onOk} onCancel={() => modalApi.closeModal()}>
-      Copy/override the following paths from {sourcePath} to {targetPath}
+      Source directory
+      <br /> <Path>{sourcePath}</Path>
+      <br /> Target directory
+      <br /> <Path>{targetPath}</Path>
+      <br />
+      Files
       {selectedEntries.map((e) => (
-        <p>{e}</p>
+        <Path>{e}</Path>
       ))}
       {copyErrors.length ? (
         <Alert
