@@ -341,8 +341,14 @@ impl Entry {
     }
 }
 
-fn analyze_directory_recursive<P: AsRef<Path>>(directory_path: P) -> Entry {
+fn analyze_directory_recursive<P: AsRef<Path>>(
+    app_handle: &tauri::AppHandle,
+    directory_path: P,
+) -> Entry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
+    use tauri::Manager;
+    app_handle.emit_all("new_count", &path_str).unwrap();
+
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
         return Entry::Error {
@@ -410,11 +416,11 @@ struct AnalyseResult {
     result: Entry,
     duration: u64,
 }
-#[tauri::command]
-fn analyze_disk_usage(path: String) -> AnalyseResult {
+#[tauri::command(async)]
+fn analyze_disk_usage(app_handle: tauri::AppHandle, path: String) -> AnalyseResult {
     use std::time::Instant;
     let now = Instant::now();
-    let result = analyze_directory_recursive(Path::new(&path));
+    let result = analyze_directory_recursive(&app_handle, Path::new(&path));
     let duration = now.elapsed().as_millis();
     println!("{}", duration);
     AnalyseResult {

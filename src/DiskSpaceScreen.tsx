@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Table } from 'antd';
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import filesize from 'filesize';
 import DirectorySelect from './DirectorySelect';
 
@@ -43,25 +44,45 @@ const convertNode = (node: Node): AntTreeNode => {
 const DiskSpaceScreen = () => {
   const [path, setPath] = useState('');
   const [result, setResult] = useState<AntTreeNode[] | void>();
-  const [duration, setDuration] = useState<number>();
+  const [durationBE, setDurationBE] = useState<number | void>();
+  const [durationFE, setDurationFE] = useState<number | void>();
+  const [progress, setProgress] = useState('');
+
+  useEffect(() => {
+    const unlisten = listen<string>('new_count', (event) =>
+      setProgress(event.payload.slice(path.length + 1))
+    );
+
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [path.length]);
 
   return (
     <>
       <DirectorySelect value={path} onChange={setPath} buttonLabel='Select directory' />
       <button
-        onClick={() =>
+        onClick={() => {
+          setDurationBE(undefined);
+          setDurationFE(undefined);
+          setResult(undefined);
+          let start = Date.now();
           invoke<{ result: DirectoryNode; duration: number }>('analyze_disk_usage', { path })
             .then((res) => {
-              setDuration(res.duration);
+              setDurationBE(res.duration);
+              setDurationFE(Date.now() - start);
+              setProgress('');
               return res.result.content.map(convertNode);
             })
             .then(setResult)
-            .catch(console.error)
-        }
+            .catch(console.error);
+        }}
       >
         Analyze!
       </button>
-      {duration ? duration : null}
+      <div>{progress}</div>
+      {durationBE ? <div>Duration BE: {durationBE}</div> : null}
+      {durationFE ? <div>Duration FE: {durationFE}</div> : null}
       {result ? (
         <Table
           columns={[
