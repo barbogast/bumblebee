@@ -342,22 +342,22 @@ impl Entry {
 }
 
 use std::time::{Duration, Instant};
-struct Debounce {
+
+struct Debounce<'a, Arg> {
     delay: Duration,
     last_run: Option<Instant>,
+    func: &'a dyn Fn(Arg) -> (),
 }
 
-impl Debounce {
-    fn new(delay: Duration) -> Self {
+impl<'a, Arg> Debounce<'a, Arg> {
+    fn new(delay: Duration, func: &'a dyn Fn(Arg)) -> Self {
         Self {
             delay,
+            func,
             last_run: None,
         }
     }
-    fn maybe_run<F, T, U>(&mut self, func: F, t: T)
-    where
-        F: Fn(T) -> U,
-    {
+    fn maybe_run(&mut self, arg: Arg) {
         if self.last_run.is_some() {
             let then = self.last_run.unwrap();
             let now = Instant::now();
@@ -365,11 +365,11 @@ impl Debounce {
             if now.duration_since(then) > self.delay {
                 self.last_run = Some(Instant::now());
 
-                func(t);
+                (self.func)(arg);
             }
         } else {
             self.last_run = Some(Instant::now());
-            func(t);
+            (self.func)(arg);
         }
     }
 }
@@ -377,15 +377,11 @@ impl Debounce {
 use tauri::Manager;
 fn analyze_directory_recursive<P: AsRef<Path>>(
     app_handle: &tauri::AppHandle,
-    report_progress: &mut Debounce,
+    report_progress: &mut Debounce<String>,
     directory_path: P,
 ) -> Entry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
-    report_progress.maybe_run(
-        |path| app_handle.emit_all("new_count", &path).unwrap(),
-        &path_str,
-    );
-    // app_handle.emit_all("new_count", &path_str).unwrap();
+    report_progress.maybe_run(path_str.clone());
 
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
@@ -463,7 +459,8 @@ struct AnalyseResult {
 fn analyze_disk_usage(app_handle: tauri::AppHandle, path: String) -> AnalyseResult {
     use std::time::Instant;
     let now = Instant::now();
-    let mut report_progress = Debounce::new(Duration::from_millis(100));
+    let func = |path: String| app_handle.emit_all("new_count", path).unwrap();
+    let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
     let result = analyze_directory_recursive(&app_handle, &mut report_progress, Path::new(&path));
     let duration = now.elapsed().as_millis();
 
