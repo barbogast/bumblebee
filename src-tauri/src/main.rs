@@ -346,7 +346,7 @@ use std::time::{Duration, Instant};
 struct Debounce<'a, Arg> {
     delay: Duration,
     last_run: Option<Instant>,
-    func: &'a dyn Fn(Arg) -> (),
+    func: &'a dyn Fn(Arg),
 }
 
 impl<'a, Arg> Debounce<'a, Arg> {
