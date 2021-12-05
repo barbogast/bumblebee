@@ -9,6 +9,7 @@ use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::fs;
 use std::fs::metadata;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -299,9 +300,105 @@ fn copy(source_path: String, target_path: String, sub_paths: Vec<String>) -> Vec
         .collect()
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+enum Entry {
+    File {
+        path: String,
+        size: u64,
+    },
+    Dir {
+        path: String,
+        size: u64,
+        content: Vec<Entry>,
+    },
+    Error {
+        path: Option<String>,
+        size: Option<u64>,
+        content: Option<Vec<Entry>>,
+        reason: String,
+    },
+}
+
+impl Entry {
+    fn size(&self) -> u64 {
+        match self {
+            Entry::File { size, .. } => *size,
+            Entry::Dir { size, .. } => *size,
+            Entry::Error { .. } => 0,
+        }
+    }
+}
+
+fn analyze_directory_recursive<P: AsRef<Path>>(directory_path: P) -> Entry {
+    let path_str = directory_path.as_ref().to_string_lossy().to_string();
+    let read_dir = fs::read_dir(directory_path);
+    if let Err(err) = read_dir {
+        return Entry::Error {
+            path: Some(path_str),
+            size: None,
+            content: None,
+            reason: err.to_string(),
+        };
+    }
+
+    let read_dir = read_dir.unwrap();
+
+    let mut entries: Vec<Entry> = Vec::new();
+    for entry in read_dir {
+        if let Err(err) = entry {
+            entries.push(Entry::Error {
+                path: None,
+                size: None,
+                content: None,
+                reason: err.to_string(),
+            });
+            continue;
+        }
+
+        let entry = entry.unwrap();
+
+        let metadata = entry.metadata();
+        if let Err(err) = metadata {
+            entries.push(Entry::Error {
+                path: Some(entry.path().to_string_lossy().to_string()),
+                size: None,
+                content: None,
+                reason: err.to_string(),
+            });
+            continue;
+        }
+        let metadata = metadata.unwrap();
+
+        if metadata.is_file() {
+            entries.push(Entry::File {
+                path: entry.path().to_string_lossy().to_string(),
+                size: metadata.len(),
+            });
+
+            // TODO: is_symlink is unstable
+            // } else if metaadata.is_symlink() {
+        } else {
+            entries.push(analyze_directory_recursive(entry.path()));
+        }
+    }
+
+    let size: u64 = entries.iter().map(|entry| entry.size()).sum();
+    Entry::Dir {
+        path: path_str,
+        content: entries,
+        size,
+    }
+}
+
+#[tauri::command]
+fn analyze_disk_usage(path: String) -> Entry {
+    analyze_directory_recursive(Path::new(&path))
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![compare, copy])
+        .invoke_handler(tauri::generate_handler![compare, copy, analyze_disk_usage])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
