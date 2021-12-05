@@ -310,6 +310,7 @@ enum Entry {
     Dir {
         path: String,
         size: u64,
+        number_of_files: u64,
         content: Vec<Entry>,
     },
     Error {
@@ -326,6 +327,16 @@ impl Entry {
             Entry::File { size, .. } => *size,
             Entry::Dir { size, .. } => *size,
             Entry::Error { .. } => 0,
+        }
+    }
+
+    fn number_of_files(&self) -> u64 {
+        match self {
+            Entry::File { size, .. } => 1,
+            Entry::Error { .. } => 1,
+            Entry::Dir {
+                number_of_files, ..
+            } => *number_of_files,
         }
     }
 }
@@ -384,10 +395,13 @@ fn analyze_directory_recursive<P: AsRef<Path>>(directory_path: P) -> Entry {
     }
 
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
+    let number_of_files = entries.iter().map(|entry| entry.number_of_files()).sum();
+
     Entry::Dir {
         path: path_str,
         content: entries,
         size,
+        number_of_files,
     }
 }
 

@@ -14,6 +14,7 @@ type DirectoryNode = {
   type: 'Dir';
   path: string;
   size: number;
+  number_of_files: number;
   content: Node[];
 };
 
@@ -23,6 +24,7 @@ type AntTreeNode = {
   name: string;
   size: number;
   sizeHuman: string;
+  numberOfFiles: string;
   key: string;
   children: AntTreeNode[] | void;
 };
@@ -32,6 +34,7 @@ const convertNode = (node: Node): AntTreeNode => {
     name: node.path.split('/').pop() || '',
     size: node.size,
     sizeHuman: filesize(node.size),
+    numberOfFiles: node.type === 'Dir' ? String(node.number_of_files) : '',
     key: node.path,
     children: node.type === 'Dir' ? node.content.map(convertNode) : undefined,
   };
@@ -59,6 +62,11 @@ const DiskSpaceScreen = () => {
           columns={[
             { title: 'Name', dataIndex: 'name' },
             { title: 'Size', dataIndex: 'sizeHuman', sorter: (a, b) => a.size - b.size },
+            {
+              title: '# files',
+              dataIndex: 'numberOfFiles',
+              sorter: (a, b) => parseInt(a.numberOfFiles) - parseInt(b.numberOfFiles),
+            },
           ]}
           dataSource={result}
         />
