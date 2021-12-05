@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Button } from 'antd';
 import { DoubleRightOutlined, DoubleLeftOutlined } from '@ant-design/icons';
 import './App.css';
-import { open } from '@tauri-apps/api/dialog';
 import { invoke } from '@tauri-apps/api/tauri';
 
 import CopyModal, { useModalState } from './CopyModal';
 import ComparisonTable, { useTableState } from './ComparisonTable';
 import { CompareResult } from './types';
+import DirectorySelect from './DirectorySelect';
 
 const CompareScreen = () => {
   const [pathA, setPathA] = useState<string>('');
@@ -17,32 +17,9 @@ const CompareScreen = () => {
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'row', marginBottom: 10 }}>
-        <button
-          onClick={() =>
-            open({ directory: true })
-              .then((path) => setPathA(path as string))
-              .catch(console.error)
-          }
-          style={{ marginRight: 10 }}
-        >
-          Set directory A
-        </button>
-        <input value={pathA} onChange={(e) => setPathA(e.target.value)} style={{ flex: 1 }} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'row', marginBottom: 10 }}>
-        <button
-          onClick={() =>
-            open({ directory: true })
-              .then((path) => setPathB(path as string))
-              .catch(console.error)
-          }
-          style={{ marginRight: 10 }}
-        >
-          Set directory B
-        </button>
-        <input value={pathB} onChange={(e) => setPathB(e.target.value)} style={{ flex: 1 }} />
-      </div>
+      <DirectorySelect value={pathA} onChange={setPathA} buttonLabel='Set directory A' />
+      <DirectorySelect value={pathB} onChange={setPathB} buttonLabel='Set directory B' />
+
       <div style={{ marginBottom: 10 }}>
         <button
           onClick={() => {
