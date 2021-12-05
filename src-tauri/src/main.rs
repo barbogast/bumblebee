@@ -459,7 +459,7 @@ struct AnalyseResult {
 fn analyze_disk_usage(app_handle: tauri::AppHandle, path: String) -> AnalyseResult {
     use std::time::Instant;
     let now = Instant::now();
-    let func = |path: String| app_handle.emit_all("new_count", path).unwrap();
+    let func = |path: String| app_handle.emit_all("progress", path).unwrap();
     let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
     let result = analyze_directory_recursive(&app_handle, &mut report_progress, Path::new(&path));
     let duration = now.elapsed().as_millis();

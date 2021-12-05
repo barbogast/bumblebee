@@ -49,7 +49,7 @@ const DiskSpaceScreen = () => {
   const [progress, setProgress] = useState('');
 
   useEffect(() => {
-    const unlisten = listen<string>('new_count', (event) =>
+    const unlisten = listen<string>('progress', (event) =>
       setProgress(event.payload.slice(path.length + 1))
     );
 
