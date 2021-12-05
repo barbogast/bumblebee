@@ -43,20 +43,25 @@ const convertNode = (node: Node): AntTreeNode => {
 const DiskSpaceScreen = () => {
   const [path, setPath] = useState('');
   const [result, setResult] = useState<AntTreeNode[] | void>();
+  const [duration, setDuration] = useState<number>();
 
   return (
     <>
       <DirectorySelect value={path} onChange={setPath} buttonLabel='Select directory' />
       <button
         onClick={() =>
-          invoke<DirectoryNode>('analyze_disk_usage', { path })
-            .then((res) => res.content.map(convertNode))
+          invoke<{ result: DirectoryNode; duration: number }>('analyze_disk_usage', { path })
+            .then((res) => {
+              setDuration(res.duration);
+              return res.result.content.map(convertNode);
+            })
             .then(setResult)
             .catch(console.error)
         }
       >
         Analyze!
       </button>
+      {duration ? duration : null}
       {result ? (
         <Table
           columns={[

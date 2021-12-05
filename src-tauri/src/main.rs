@@ -405,9 +405,22 @@ fn analyze_directory_recursive<P: AsRef<Path>>(directory_path: P) -> Entry {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+struct AnalyseResult {
+    result: Entry,
+    duration: u64,
+}
 #[tauri::command]
-fn analyze_disk_usage(path: String) -> Entry {
-    analyze_directory_recursive(Path::new(&path))
+fn analyze_disk_usage(path: String) -> AnalyseResult {
+    use std::time::Instant;
+    let now = Instant::now();
+    let result = analyze_directory_recursive(Path::new(&path));
+    let duration = now.elapsed().as_millis();
+    println!("{}", duration);
+    AnalyseResult {
+        result,
+        duration: duration as u64,
+    }
 }
 
 fn main() {
