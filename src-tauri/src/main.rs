@@ -332,7 +332,7 @@ impl Entry {
 
     fn number_of_files(&self) -> u64 {
         match self {
-            Entry::File { size, .. } => 1,
+            Entry::File { .. } => 1,
             Entry::Error { .. } => 1,
             Entry::Dir {
                 number_of_files, ..
