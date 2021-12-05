@@ -341,13 +341,51 @@ impl Entry {
     }
 }
 
+use std::time::{Duration, Instant};
+struct Debounce {
+    delay: Duration,
+    last_run: Option<Instant>,
+}
+
+impl Debounce {
+    fn new(delay: Duration) -> Self {
+        Self {
+            delay,
+            last_run: None,
+        }
+    }
+    fn maybe_run<F, T, U>(&mut self, func: F, t: T)
+    where
+        F: Fn(T) -> U,
+    {
+        if self.last_run.is_some() {
+            let then = self.last_run.unwrap();
+            let now = Instant::now();
+
+            if now.duration_since(then) > self.delay {
+                self.last_run = Some(Instant::now());
+
+                func(t);
+            }
+        } else {
+            self.last_run = Some(Instant::now());
+            func(t);
+        }
+    }
+}
+
+use tauri::Manager;
 fn analyze_directory_recursive<P: AsRef<Path>>(
     app_handle: &tauri::AppHandle,
+    report_progress: &mut Debounce,
     directory_path: P,
 ) -> Entry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
-    use tauri::Manager;
-    app_handle.emit_all("new_count", &path_str).unwrap();
+    report_progress.maybe_run(
+        |path| app_handle.emit_all("new_count", &path).unwrap(),
+        &path_str,
+    );
+    // app_handle.emit_all("new_count", &path_str).unwrap();
 
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
@@ -396,7 +434,12 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
             // TODO: is_symlink is unstable
             // } else if metaadata.is_symlink() {
         } else {
-            entries.push(analyze_directory_recursive(entry.path()));
+            // TODO: Implement a limit for the recursion depth to protect against a stack overflow
+            entries.push(analyze_directory_recursive(
+                app_handle,
+                report_progress,
+                entry.path(),
+            ));
         }
     }
 
@@ -420,9 +463,10 @@ struct AnalyseResult {
 fn analyze_disk_usage(app_handle: tauri::AppHandle, path: String) -> AnalyseResult {
     use std::time::Instant;
     let now = Instant::now();
-    let result = analyze_directory_recursive(&app_handle, Path::new(&path));
+    let mut report_progress = Debounce::new(Duration::from_millis(100));
+    let result = analyze_directory_recursive(&app_handle, &mut report_progress, Path::new(&path));
     let duration = now.elapsed().as_millis();
-    println!("{}", duration);
+
     AnalyseResult {
         result,
         duration: duration as u64,
