@@ -51,40 +51,35 @@ impl Entry {
     }
 }
 
-fn analyse_entry(context: &mut Context, entry: Result<fs::DirEntry, io::Error>) -> Entry {
-    if let Err(err) = entry {
-        return Entry::Error {
-            path: None,
-            size: None,
-            content: None,
-            reason: err.to_string(),
-        };
-    }
+fn analyse_entry(
+    context: &mut Context,
+    entry: Result<fs::DirEntry, io::Error>,
+) -> Result<Entry, Entry> {
+    let entry = entry.map_err(|err| Entry::Error {
+        path: None,
+        size: None,
+        content: None,
+        reason: err.to_string(),
+    })?;
 
-    let entry = entry.unwrap();
-
-    let metadata = entry.metadata();
-    if let Err(err) = metadata {
-        return Entry::Error {
-            path: Some(entry.path().to_string_lossy().to_string()),
-            size: None,
-            content: None,
-            reason: err.to_string(),
-        };
-    }
-    let metadata = metadata.unwrap();
+    let metadata = entry.metadata().map_err(|err| Entry::Error {
+        path: Some(entry.path().to_string_lossy().to_string()),
+        size: None,
+        content: None,
+        reason: err.to_string(),
+    })?;
 
     if metadata.is_file() {
-        return Entry::File {
+        Ok(Entry::File {
             path: entry.path().to_string_lossy().to_string(),
             size: metadata.len(),
-        };
+        })
 
         // TODO: is_symlink is unstable
         // } else if metaadata.is_symlink() {
     } else {
         // TODO: Implement a limit for the recursion depth to protect against a stack overflow
-        analyze_directory_recursive(context, entry.path())
+        Ok(analyze_directory_recursive(context, entry.path()))
     }
 }
 
@@ -114,7 +109,9 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
 
     let mut entries: Vec<Entry> = Vec::new();
     for entry in read_dir {
-        entries.push(analyse_entry(context, entry));
+        match analyse_entry(context, entry) {
+            Ok(e) | Err(e) => entries.push(e),
+        }
     }
 
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
