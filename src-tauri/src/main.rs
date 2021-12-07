@@ -4,7 +4,6 @@
 )]
 
 use data_encoding::HEXUPPER;
-use fs_extra;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::cmp::Ordering;
