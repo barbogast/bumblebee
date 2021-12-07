@@ -14,6 +14,8 @@ use std::fs::metadata;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
+use std::sync::atomic;
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -378,9 +380,18 @@ use tauri::Manager;
 fn analyze_directory_recursive<P: AsRef<Path>>(
     app_handle: &tauri::AppHandle,
     report_progress: &mut Debounce<String>,
+    should_abort: &ShouldAbort,
     directory_path: P,
 ) -> Entry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
+    if should_abort.0.load(atomic::Ordering::Relaxed) {
+        return Entry::Error {
+            path: Some(path_str),
+            size: None,
+            content: None,
+            reason: "Aborted".to_string(),
+        };
+    }
     report_progress.maybe_run(path_str.clone());
 
     let read_dir = fs::read_dir(directory_path);
@@ -434,6 +445,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
             entries.push(analyze_directory_recursive(
                 app_handle,
                 report_progress,
+                should_abort,
                 entry.path(),
             ));
         }
@@ -456,23 +468,55 @@ struct AnalyseResult {
     duration: u64,
 }
 #[tauri::command(async)]
-fn analyze_disk_usage(app_handle: tauri::AppHandle, path: String) -> AnalyseResult {
+fn analyze_disk_usage(
+    app_handle: tauri::AppHandle,
+    should_abort: tauri::State<ShouldAbort>,
+    path: String,
+) -> AnalyseResult {
+    should_abort.0.store(false, atomic::Ordering::Relaxed);
     use std::time::Instant;
     let now = Instant::now();
     let func = |path: String| app_handle.emit_all("progress", path).unwrap();
     let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
-    let result = analyze_directory_recursive(&app_handle, &mut report_progress, Path::new(&path));
+    let mut result = analyze_directory_recursive(
+        &app_handle,
+        &mut report_progress,
+        &should_abort,
+        Path::new(&path),
+    );
     let duration = now.elapsed().as_millis();
 
+    if should_abort.0.load(atomic::Ordering::Relaxed) {
+        // No sense to send the data collected so far, return an empty result
+        result = Entry::Error {
+            path: Some(path),
+            size: None,
+            content: None,
+            reason: "Aborted".to_string(),
+        };
+    }
     AnalyseResult {
         result,
         duration: duration as u64,
     }
 }
+#[derive(Debug)]
+struct ShouldAbort(atomic::AtomicBool);
+
+#[tauri::command]
+fn abort(should_abort: tauri::State<'_, ShouldAbort>) {
+    should_abort.0.store(true, atomic::Ordering::Relaxed);
+}
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![compare, copy, analyze_disk_usage])
+        .manage(ShouldAbort(AtomicBool::new(false)))
+        .invoke_handler(tauri::generate_handler![
+            compare,
+            copy,
+            analyze_disk_usage,
+            abort
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

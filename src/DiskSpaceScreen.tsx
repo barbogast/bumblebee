@@ -80,6 +80,7 @@ const DiskSpaceScreen = () => {
       >
         Analyze!
       </button>
+      <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
       <div>{progress}</div>
       {durationBE ? <div>Duration BE: {durationBE}</div> : null}
       {durationFE ? <div>Duration FE: {durationFE}</div> : null}
