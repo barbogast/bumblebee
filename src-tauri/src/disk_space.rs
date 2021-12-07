@@ -1,8 +1,8 @@
 use crate::debounce::Debounce;
-use std::fs;
 use std::path::Path;
 use std::sync::atomic;
 use std::time::Duration;
+use std::{fs, io};
 use tauri::Manager;
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -46,6 +46,48 @@ impl Entry {
     }
 }
 
+fn analyse_entry(
+    app_handle: &tauri::AppHandle,
+    report_progress: &mut Debounce<String>,
+    should_abort: &ShouldAbort,
+    entry: Result<fs::DirEntry, io::Error>,
+) -> Entry {
+    if let Err(err) = entry {
+        return Entry::Error {
+            path: None,
+            size: None,
+            content: None,
+            reason: err.to_string(),
+        };
+    }
+
+    let entry = entry.unwrap();
+
+    let metadata = entry.metadata();
+    if let Err(err) = metadata {
+        return Entry::Error {
+            path: Some(entry.path().to_string_lossy().to_string()),
+            size: None,
+            content: None,
+            reason: err.to_string(),
+        };
+    }
+    let metadata = metadata.unwrap();
+
+    if metadata.is_file() {
+        return Entry::File {
+            path: entry.path().to_string_lossy().to_string(),
+            size: metadata.len(),
+        };
+
+        // TODO: is_symlink is unstable
+        // } else if metaadata.is_symlink() {
+    } else {
+        // TODO: Implement a limit for the recursion depth to protect against a stack overflow
+        analyze_directory_recursive(app_handle, report_progress, should_abort, entry.path())
+    }
+}
+
 fn analyze_directory_recursive<P: AsRef<Path>>(
     app_handle: &tauri::AppHandle,
     report_progress: &mut Debounce<String>,
@@ -77,47 +119,12 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
 
     let mut entries: Vec<Entry> = Vec::new();
     for entry in read_dir {
-        if let Err(err) = entry {
-            entries.push(Entry::Error {
-                path: None,
-                size: None,
-                content: None,
-                reason: err.to_string(),
-            });
-            continue;
-        }
-
-        let entry = entry.unwrap();
-
-        let metadata = entry.metadata();
-        if let Err(err) = metadata {
-            entries.push(Entry::Error {
-                path: Some(entry.path().to_string_lossy().to_string()),
-                size: None,
-                content: None,
-                reason: err.to_string(),
-            });
-            continue;
-        }
-        let metadata = metadata.unwrap();
-
-        if metadata.is_file() {
-            entries.push(Entry::File {
-                path: entry.path().to_string_lossy().to_string(),
-                size: metadata.len(),
-            });
-
-            // TODO: is_symlink is unstable
-            // } else if metaadata.is_symlink() {
-        } else {
-            // TODO: Implement a limit for the recursion depth to protect against a stack overflow
-            entries.push(analyze_directory_recursive(
-                app_handle,
-                report_progress,
-                should_abort,
-                entry.path(),
-            ));
-        }
+        entries.push(analyse_entry(
+            app_handle,
+            report_progress,
+            should_abort,
+            entry,
+        ));
     }
 
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
