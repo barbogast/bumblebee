@@ -26,6 +26,11 @@ enum Entry {
     },
 }
 
+struct Context<'a, 'b> {
+    report_progress: &'a mut Debounce<'a, String>,
+    should_abort: &'b ShouldAbort,
+}
+
 impl Entry {
     fn size(&self) -> u64 {
         match self {
@@ -46,12 +51,7 @@ impl Entry {
     }
 }
 
-fn analyse_entry(
-    app_handle: &tauri::AppHandle,
-    report_progress: &mut Debounce<String>,
-    should_abort: &ShouldAbort,
-    entry: Result<fs::DirEntry, io::Error>,
-) -> Entry {
+fn analyse_entry(context: &mut Context, entry: Result<fs::DirEntry, io::Error>) -> Entry {
     if let Err(err) = entry {
         return Entry::Error {
             path: None,
@@ -84,18 +84,13 @@ fn analyse_entry(
         // } else if metaadata.is_symlink() {
     } else {
         // TODO: Implement a limit for the recursion depth to protect against a stack overflow
-        analyze_directory_recursive(app_handle, report_progress, should_abort, entry.path())
+        analyze_directory_recursive(context, entry.path())
     }
 }
 
-fn analyze_directory_recursive<P: AsRef<Path>>(
-    app_handle: &tauri::AppHandle,
-    report_progress: &mut Debounce<String>,
-    should_abort: &ShouldAbort,
-    directory_path: P,
-) -> Entry {
+fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_path: P) -> Entry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
-    if should_abort.0.load(atomic::Ordering::Relaxed) {
+    if context.should_abort.0.load(atomic::Ordering::Relaxed) {
         return Entry::Error {
             path: Some(path_str),
             size: None,
@@ -103,7 +98,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
             reason: "Aborted".to_string(),
         };
     }
-    report_progress.maybe_run(path_str.clone());
+    context.report_progress.maybe_run(path_str.clone());
 
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
@@ -119,12 +114,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
 
     let mut entries: Vec<Entry> = Vec::new();
     for entry in read_dir {
-        entries.push(analyse_entry(
-            app_handle,
-            report_progress,
-            should_abort,
-            entry,
-        ));
+        entries.push(analyse_entry(context, entry));
     }
 
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
@@ -156,9 +146,10 @@ pub fn analyze_disk_usage(
     let func = |path: String| app_handle.emit_all("progress", path).unwrap();
     let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
     let mut result = analyze_directory_recursive(
-        &app_handle,
-        &mut report_progress,
-        &should_abort,
+        &mut Context {
+            report_progress: &mut report_progress,
+            should_abort: &should_abort,
+        },
         Path::new(&path),
     );
     let duration = now.elapsed().as_millis();
