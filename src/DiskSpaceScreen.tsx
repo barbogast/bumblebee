@@ -59,16 +59,23 @@ const DiskSpaceScreen = () => {
   const [durationFE, setDurationFE] = useState<number | void>();
   const [progress, setProgress] = useState('');
   const [numberOfFiles, setNumberOfFiles] = useState(0);
+  const [totalSize, setTotalSize] = useState(0);
 
   useEffect(() => {
-    const unlisten = listen<{ path: string; number_of_files_found: number }>(
-      'progress',
-      (event) => {
-        const { path: currentPath, number_of_files_found: numberOfFilesFound } = event.payload;
-        setProgress(currentPath.slice(path.length + 1));
-        setNumberOfFiles(numberOfFilesFound);
-      }
-    );
+    const unlisten = listen<{
+      path: string;
+      number_of_files_found: number;
+      total_size_found: number;
+    }>('progress', (event) => {
+      const {
+        path: currentPath,
+        number_of_files_found: numberOfFilesFound,
+        total_size_found: totalSize,
+      } = event.payload;
+      setProgress(currentPath.slice(path.length + 1));
+      setNumberOfFiles(numberOfFilesFound);
+      setTotalSize(totalSize);
+    });
 
     return () => {
       unlisten.then((f) => f());
@@ -101,6 +108,7 @@ const DiskSpaceScreen = () => {
       </button>
       <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
       {numberOfFiles ? <div>Files: {numberOfFiles.toLocaleString()}</div> : null}
+      {totalSize ? <div>Size: {filesize(totalSize)}</div> : null}
       <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
         {progress}
       </div>

@@ -80,12 +80,14 @@ pub enum Entry {
 struct ProgressPayload {
     path: String,
     number_of_files_found: u64,
+    total_size_found: u64,
 }
 
 struct Context<'a, 'b> {
     report_progress: &'a mut Debounce<'a, ProgressPayload>,
     should_abort: &'b ShouldAbort,
     number_of_files_found: u64,
+    total_size_found: u64,
 }
 
 impl Entry {
@@ -155,6 +157,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
     context.report_progress.maybe_run(ProgressPayload {
         path: path_str.clone(),
         number_of_files_found: context.number_of_files_found,
+        total_size_found: context.total_size_found,
     });
 
     let read_dir = fs::read_dir(directory_path);
@@ -182,6 +185,11 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
         .iter()
         .filter(|entry| matches!(entry, Entry::File(_)))
         .count() as u64;
+    context.total_size_found += entries
+        .iter()
+        .filter(|entry| matches!(entry, Entry::File(_)))
+        .map(|entry| entry.size())
+        .sum::<u64>();
 
     Entry::Dir(DirEntry {
         path: path_str,
@@ -214,6 +222,7 @@ pub fn analyze_disk_usage(
             report_progress: &mut report_progress,
             should_abort: &should_abort,
             number_of_files_found: 0,
+            total_size_found: 0,
         },
         Path::new(&path),
     );
