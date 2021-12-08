@@ -101,7 +101,9 @@ const DiskSpaceScreen = () => {
       </button>
       <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
       {numberOfFiles ? <div>Discovered files: {numberOfFiles.toLocaleString()}</div> : null}
-      <div>{progress}</div>
+      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+        {progress}
+      </div>
       {durationBE ? <div>Duration BE: {durationBE}</div> : null}
       {durationFE ? <div>Duration FE: {durationFE}</div> : null}
       {result ? (
