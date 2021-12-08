@@ -12,7 +12,7 @@ use std::fs::metadata;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -305,6 +305,7 @@ fn copy(source_path: String, target_path: String, sub_paths: Vec<String>) -> Vec
 fn main() {
     tauri::Builder::default()
         .manage(disk_space::ShouldAbort(AtomicBool::new(false)))
+        .manage(disk_space::SavedAnalysisResult(AtomicPtr::new(&mut None)))
         .invoke_handler(tauri::generate_handler![
             compare,
             copy,

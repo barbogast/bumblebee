@@ -13,6 +13,31 @@ pub struct DirEntry {
     content: Vec<Entry>,
 }
 
+impl DirEntry {
+    fn clone_flat(&self, levels_to_keep: i32) -> Self {
+        let content = if levels_to_keep > 0 {
+            let x = self
+                .content
+                .iter()
+                .map(|entry| match entry {
+                    Entry::File(f) => Entry::File(f.clone()),
+                    Entry::Error(e) => Entry::Error(e.clone()),
+                    Entry::Dir(d) => Entry::Dir(d.clone_flat(levels_to_keep - 1)),
+                })
+                .collect();
+            x
+        } else {
+            vec![]
+        };
+        DirEntry {
+            content,
+            path: self.path.clone(),
+            size: self.size,
+            number_of_files: self.number_of_files,
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ErrorEntry {
     path: Option<String>,
@@ -146,6 +171,7 @@ pub struct AnalyseResult {
 pub fn analyze_disk_usage(
     app_handle: tauri::AppHandle,
     should_abort: tauri::State<ShouldAbort>,
+    saved_result: tauri::State<SavedAnalysisResult>,
     path: String,
 ) -> AnalyseResult {
     should_abort.0.store(false, atomic::Ordering::Relaxed);
@@ -153,7 +179,7 @@ pub fn analyze_disk_usage(
     let now = Instant::now();
     let func = |path: String| app_handle.emit_all("progress", path).unwrap();
     let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
-    let mut result = analyze_directory_recursive(
+    let result = analyze_directory_recursive(
         &mut Context {
             report_progress: &mut report_progress,
             should_abort: &should_abort,
@@ -164,20 +190,34 @@ pub fn analyze_disk_usage(
 
     if should_abort.0.load(atomic::Ordering::Relaxed) {
         // No sense to send the data collected so far, return an empty result
-        result = Entry::Error(ErrorEntry {
-            path: Some(path),
-            size: None,
-            content: None,
-            reason: "Aborted".to_string(),
-        });
+        return AnalyseResult {
+            result: Entry::Error(ErrorEntry {
+                path: Some(path),
+                size: None,
+                content: None,
+                reason: "Aborted".to_string(),
+            }),
+            duration: duration as u64,
+        };
     }
+
+    let flat_result = match result {
+        Entry::Dir(ref d) => Entry::Dir(d.clone_flat(2)),
+        _ => panic!(),
+    };
+
+    saved_result
+        .0
+        .store(&mut Some(result), atomic::Ordering::Relaxed);
+
     AnalyseResult {
-        result,
+        result: flat_result,
         duration: duration as u64,
     }
 }
 #[derive(Debug)]
 pub struct ShouldAbort(pub atomic::AtomicBool);
+pub struct SavedAnalysisResult(pub atomic::AtomicPtr<Option<Entry>>);
 
 #[tauri::command]
 pub fn abort(should_abort: tauri::State<'_, ShouldAbort>) {
