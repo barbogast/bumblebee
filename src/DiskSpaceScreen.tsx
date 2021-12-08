@@ -124,6 +124,7 @@ const DiskSpaceScreen = () => {
       {durationFE ? <div>Duration FE: {durationFE}</div> : null}
       {result ? (
         <Table
+          pagination={false}
           columns={[
             { title: 'Name', dataIndex: 'name' },
             { title: 'Size', dataIndex: 'sizeHuman', sorter: (a, b) => a.size - b.size },
