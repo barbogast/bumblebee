@@ -100,7 +100,7 @@ const DiskSpaceScreen = () => {
         Analyze!
       </button>
       <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
-      {numberOfFiles ? <div>Discovered files: {numberOfFiles.toLocaleString()}</div> : null}
+      {numberOfFiles ? <div>Files: {numberOfFiles.toLocaleString()}</div> : null}
       <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
         {progress}
       </div>
@@ -120,7 +120,6 @@ const DiskSpaceScreen = () => {
           dataSource={result}
           expandable={{
             onExpand: (expanded, record) => {
-              console.log(expanded, record);
               if (expanded) {
                 invoke<DirectoryNode | void>('load_nested_directory', { path: record.key })
                   .then((newNode) => {
