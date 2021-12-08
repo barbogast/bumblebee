@@ -76,9 +76,16 @@ pub enum Entry {
     Error(ErrorEntry),
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+struct ProgressPayload {
+    path: String,
+    number_of_files_found: u64,
+}
+
 struct Context<'a, 'b> {
-    report_progress: &'a mut Debounce<'a, String>,
+    report_progress: &'a mut Debounce<'a, ProgressPayload>,
     should_abort: &'b ShouldAbort,
+    number_of_files_found: u64,
 }
 
 impl Entry {
@@ -145,7 +152,10 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
             reason: "Aborted".to_string(),
         });
     }
-    context.report_progress.maybe_run(path_str.clone());
+    context.report_progress.maybe_run(ProgressPayload {
+        path: path_str.clone(),
+        number_of_files_found: context.number_of_files_found,
+    });
 
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
@@ -168,6 +178,10 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
 
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
     let number_of_files = entries.iter().map(|entry| entry.number_of_files()).sum();
+    context.number_of_files_found += entries
+        .iter()
+        .filter(|entry| matches!(entry, Entry::File(_)))
+        .count() as u64;
 
     Entry::Dir(DirEntry {
         path: path_str,
@@ -193,12 +207,13 @@ pub fn analyze_disk_usage(
     should_abort.0.store(false, atomic::Ordering::Relaxed);
     use std::time::Instant;
     let now = Instant::now();
-    let func = |path: String| app_handle.emit_all("progress", path).unwrap();
+    let func = |payload| app_handle.emit_all("progress", payload).unwrap();
     let mut report_progress = Debounce::new(Duration::from_millis(100), &func);
     let result = analyze_directory_recursive(
         &mut Context {
             report_progress: &mut report_progress,
             should_abort: &should_abort,
+            number_of_files_found: 0,
         },
         Path::new(&path),
     );

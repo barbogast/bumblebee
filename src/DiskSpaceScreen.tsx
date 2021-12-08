@@ -58,10 +58,16 @@ const DiskSpaceScreen = () => {
   const [durationBE, setDurationBE] = useState<number | void>();
   const [durationFE, setDurationFE] = useState<number | void>();
   const [progress, setProgress] = useState('');
+  const [numberOfFiles, setNumberOfFiles] = useState(0);
 
   useEffect(() => {
-    const unlisten = listen<string>('progress', (event) =>
-      setProgress(event.payload.slice(path.length + 1))
+    const unlisten = listen<{ path: string; number_of_files_found: number }>(
+      'progress',
+      (event) => {
+        const { path: currentPath, number_of_files_found: numberOfFilesFound } = event.payload;
+        setProgress(currentPath.slice(path.length + 1));
+        setNumberOfFiles(numberOfFilesFound);
+      }
     );
 
     return () => {
@@ -77,12 +83,14 @@ const DiskSpaceScreen = () => {
           setDurationBE(undefined);
           setDurationFE(undefined);
           setResult(undefined);
+          setNumberOfFiles(0);
           let start = Date.now();
           invoke<{ result: DirectoryNode; duration: number }>('analyze_disk_usage', { path })
             .then((res) => {
               setDurationBE(res.duration);
               setDurationFE(Date.now() - start);
               setProgress('');
+              setNumberOfFiles(res.result.number_of_files);
               return res.result.content.map(convertNode);
             })
             .then(setResult)
@@ -92,6 +100,7 @@ const DiskSpaceScreen = () => {
         Analyze!
       </button>
       <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
+      {numberOfFiles ? <div>Discovered files: {numberOfFiles.toLocaleString()}</div> : null}
       <div>{progress}</div>
       {durationBE ? <div>Duration BE: {durationBE}</div> : null}
       {durationFE ? <div>Duration FE: {durationFE}</div> : null}
