@@ -59,9 +59,11 @@ const DiskSpaceScreen = () => {
   const [result, setResult] = useState<AntTreeNode[] | void>();
   const [durationBE, setDurationBE] = useState<number | void>();
   const [durationFE, setDurationFE] = useState<number | void>();
-  const [progress, setProgress] = useState('');
-  const [numberOfFiles, setNumberOfFiles] = useState(0);
-  const [totalSize, setTotalSize] = useState(0);
+  const [progress, setProgress] = useState<{
+    path: string;
+    numberOfFiles: number;
+    totalSize: number;
+  } | void>();
 
   useEffect(() => {
     const unlisten = listen<{
@@ -71,12 +73,10 @@ const DiskSpaceScreen = () => {
     }>('progress', (event) => {
       const {
         path: currentPath,
-        number_of_files_found: numberOfFilesFound,
+        number_of_files_found: numberOfFiles,
         total_size_found: totalSize,
       } = event.payload;
-      setProgress(currentPath.slice(path.length + 1));
-      setNumberOfFiles(numberOfFilesFound);
-      setTotalSize(totalSize);
+      setProgress({ path: currentPath.slice(path.length + 1), numberOfFiles, totalSize });
     });
 
     return () => {
@@ -92,14 +92,16 @@ const DiskSpaceScreen = () => {
           setDurationBE(undefined);
           setDurationFE(undefined);
           setResult(undefined);
-          setNumberOfFiles(0);
           let start = Date.now();
           invoke<{ result: DirectoryNode; duration: number }>('analyze_disk_usage', { path })
             .then((res) => {
               setDurationBE(res.duration);
               setDurationFE(Date.now() - start);
-              setProgress('');
-              setNumberOfFiles(res.result.number_of_files);
+              setProgress({
+                path: '',
+                numberOfFiles: res.result.number_of_files,
+                totalSize: res.result.size,
+              });
               return res.result.content.map(convertNode);
             })
             .then(setResult)
@@ -109,11 +111,15 @@ const DiskSpaceScreen = () => {
         Analyze!
       </button>
       <button onClick={() => invoke('abort').catch(console.error)}>Abort</button>
-      {numberOfFiles ? <div>Files: {numberOfFiles.toLocaleString()}</div> : null}
-      {totalSize ? <div>Size: {filesize(totalSize)}</div> : null}
-      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        {progress}
-      </div>
+      {progress ? (
+        <div>
+          <div>Files: {progress.numberOfFiles.toLocaleString()}</div>
+          <div>Size: {filesize(progress.totalSize)}</div>
+          <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            {progress.path}
+          </div>
+        </div>
+      ) : null}
       {durationBE ? <div>Duration BE: {durationBE}</div> : null}
       {durationFE ? <div>Duration FE: {durationFE}</div> : null}
       {result ? (
