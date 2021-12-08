@@ -4,6 +4,7 @@
 )]
 
 use data_encoding::HEXUPPER;
+use disk_space::SavedAnalysisResult;
 use itertools::Itertools;
 use ring::digest::{Context, Digest, SHA256};
 use std::cmp::Ordering;
@@ -12,7 +13,7 @@ use std::fs::metadata;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicPtr};
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -305,12 +306,15 @@ fn copy(source_path: String, target_path: String, sub_paths: Vec<String>) -> Vec
 fn main() {
     tauri::Builder::default()
         .manage(disk_space::ShouldAbort(AtomicBool::new(false)))
-        .manage(disk_space::SavedAnalysisResult(AtomicPtr::new(&mut None)))
+        .manage(SavedAnalysisResult(std::sync::Arc::new(
+            std::sync::Mutex::new(None),
+        )))
         .invoke_handler(tauri::generate_handler![
             compare,
             copy,
             disk_space::analyze_disk_usage,
-            disk_space::abort
+            disk_space::abort,
+            disk_space::load_nested_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

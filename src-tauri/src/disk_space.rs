@@ -1,6 +1,6 @@
 use crate::debounce::Debounce;
 use std::path::Path;
-use std::sync::atomic;
+use std::sync::{atomic, Arc, Mutex};
 use std::time::Duration;
 use std::{fs, io};
 use tauri::Manager;
@@ -14,18 +14,17 @@ pub struct DirEntry {
 }
 
 impl DirEntry {
+    /// Clone the current entry with up to `levels_to_keep` depth of its contents
     fn clone_flat(&self, levels_to_keep: i32) -> Self {
         let content = if levels_to_keep > 0 {
-            let x = self
-                .content
+            self.content
                 .iter()
                 .map(|entry| match entry {
                     Entry::File(f) => Entry::File(f.clone()),
                     Entry::Error(e) => Entry::Error(e.clone()),
                     Entry::Dir(d) => Entry::Dir(d.clone_flat(levels_to_keep - 1)),
                 })
-                .collect();
-            x
+                .collect()
         } else {
             vec![]
         };
@@ -36,7 +35,24 @@ impl DirEntry {
             number_of_files: self.number_of_files,
         }
     }
+
+    /// Search for an entry recursivly within the current entry
+    fn get_entry_by_path(&self, path: String) -> Option<&Self> {
+        for entry in &self.content {
+            if let Entry::Dir(d) = entry {
+                dbg!("entry", &d.path);
+                if d.path == path {
+                    return Some(d);
+                } else if path.starts_with(&d.path) {
+                    return d.get_entry_by_path(path);
+                };
+            }
+        }
+        None
+    }
 }
+
+pub struct SavedAnalysisResult(pub Arc<Mutex<Option<Entry>>>);
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ErrorEntry {
@@ -206,9 +222,7 @@ pub fn analyze_disk_usage(
         _ => panic!(),
     };
 
-    saved_result
-        .0
-        .store(&mut Some(result), atomic::Ordering::Relaxed);
+    *saved_result.0.lock().unwrap() = Some(result);
 
     AnalyseResult {
         result: flat_result,
@@ -217,9 +231,21 @@ pub fn analyze_disk_usage(
 }
 #[derive(Debug)]
 pub struct ShouldAbort(pub atomic::AtomicBool);
-pub struct SavedAnalysisResult(pub atomic::AtomicPtr<Option<Entry>>);
 
 #[tauri::command]
 pub fn abort(should_abort: tauri::State<'_, ShouldAbort>) {
     should_abort.0.store(true, atomic::Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn load_nested_directory(
+    path: String,
+    saved_result: tauri::State<'_, SavedAnalysisResult>,
+) -> Option<Entry> {
+    let root_entry = &*saved_result.0.lock().unwrap();
+    if let Some(Entry::Dir(d)) = root_entry {
+        return Some(Entry::Dir(d.get_entry_by_path(path)?.clone_flat(2)));
+    }
+
+    None
 }

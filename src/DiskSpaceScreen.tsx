@@ -41,6 +41,17 @@ const convertNode = (node: Node): AntTreeNode => {
   };
 };
 
+const replaceNode = (parentNode: AntTreeNode, newNode: Node): AntTreeNode => {
+  if (parentNode.key === newNode.path) {
+    return convertNode(newNode);
+  } else {
+    return {
+      ...parentNode,
+      children: parentNode.children?.map((child) => replaceNode(child, newNode)),
+    };
+  }
+};
+
 const DiskSpaceScreen = () => {
   const [path, setPath] = useState('');
   const [result, setResult] = useState<AntTreeNode[] | void>();
@@ -96,6 +107,21 @@ const DiskSpaceScreen = () => {
             },
           ]}
           dataSource={result}
+          expandable={{
+            onExpand: (expanded, record) => {
+              console.log(expanded, record);
+              if (expanded) {
+                invoke<DirectoryNode | void>('load_nested_directory', { path: record.key })
+                  .then((newNode) => {
+                    if (!newNode) {
+                      return;
+                    }
+                    setResult((previousRes) => previousRes?.map((p) => replaceNode(p, newNode)));
+                  })
+                  .catch(console.error);
+              }
+            },
+          }}
         />
       ) : null}
     </>
