@@ -1,80 +1,12 @@
 use crate::debounce::Debounce;
+use crate::fs_entry::{DirEntry, Entry, ErrorEntry, FileEntry};
 use std::path::Path;
 use std::sync::{atomic, Arc, Mutex};
 use std::time::Duration;
 use std::{fs, io};
 use tauri::Manager;
 
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DirEntry {
-    path: String,
-    size: u64,
-    number_of_files: u64,
-    content: Vec<Entry>,
-}
-
-impl DirEntry {
-    /// Clone the current entry with up to `levels_to_keep` depth of its contents
-    fn clone_flat(&self, levels_to_keep: i32) -> Self {
-        let content = if levels_to_keep > 0 {
-            self.content
-                .iter()
-                .map(|entry| match entry {
-                    Entry::File(f) => Entry::File(f.clone()),
-                    Entry::Error(e) => Entry::Error(e.clone()),
-                    Entry::Dir(d) => Entry::Dir(d.clone_flat(levels_to_keep - 1)),
-                })
-                .collect()
-        } else {
-            vec![]
-        };
-        DirEntry {
-            content,
-            path: self.path.clone(),
-            size: self.size,
-            number_of_files: self.number_of_files,
-        }
-    }
-
-    /// Search for an entry recursivly within the current entry
-    fn get_entry_by_path(&self, path: String) -> Option<&Self> {
-        for entry in &self.content {
-            if let Entry::Dir(d) = entry {
-                dbg!("entry", &d.path);
-                if d.path == path {
-                    return Some(d);
-                } else if path.starts_with(&d.path) {
-                    return d.get_entry_by_path(path);
-                };
-            }
-        }
-        None
-    }
-}
-
 pub struct SavedAnalysisResult(pub Arc<Mutex<Option<Entry>>>);
-
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ErrorEntry {
-    path: Option<String>,
-    size: Option<u64>,
-    content: Option<Vec<Entry>>,
-    reason: String,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct FileEntry {
-    path: String,
-    size: u64,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-pub enum Entry {
-    File(FileEntry),
-    Dir(DirEntry),
-    Error(ErrorEntry),
-}
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 struct ProgressPayload {
@@ -88,24 +20,6 @@ struct Context<'a, 'b> {
     should_abort: &'b ShouldAbort,
     number_of_files_found: u64,
     total_size_found: u64,
-}
-
-impl Entry {
-    fn size(&self) -> u64 {
-        match self {
-            Entry::File(f) => f.size,
-            Entry::Dir(d) => d.size,
-            Entry::Error(_) => 0,
-        }
-    }
-
-    fn number_of_files(&self) -> u64 {
-        match self {
-            Entry::File(_) => 1,
-            Entry::Error(_) => 1,
-            Entry::Dir(d) => d.number_of_files,
-        }
-    }
 }
 
 fn analyse_entry(

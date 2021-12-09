@@ -19,6 +19,7 @@ use walkdir::WalkDir;
 
 mod debounce;
 mod disk_space;
+mod fs_entry;
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, serde::Serialize, serde::Deserialize)]
 enum EntryType {
