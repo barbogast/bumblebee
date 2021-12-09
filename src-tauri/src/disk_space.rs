@@ -1,12 +1,12 @@
 use crate::debounce::Debounce;
-use crate::fs_entry::{DirEntry, Entry, ErrorEntry, FileEntry};
+use crate::fs_entry::{DirEntry, ErrorEntry, FileEntry, FsEntry};
 use std::path::Path;
 use std::sync::{atomic, Arc, Mutex};
 use std::time::Duration;
 use std::{fs, io};
 use tauri::Manager;
 
-pub struct SavedAnalysisResult(pub Arc<Mutex<Option<Entry>>>);
+pub struct SavedAnalysisResult(pub Arc<Mutex<Option<FsEntry>>>);
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 struct ProgressPayload {
@@ -25,9 +25,9 @@ struct Context<'a, 'b> {
 fn analyse_entry(
     context: &mut Context,
     entry: Result<fs::DirEntry, io::Error>,
-) -> Result<Entry, Entry> {
+) -> Result<FsEntry, FsEntry> {
     let entry = entry.map_err(|err| {
-        Entry::Error(ErrorEntry {
+        FsEntry::Error(ErrorEntry {
             path: None,
             size: None,
             content: None,
@@ -36,7 +36,7 @@ fn analyse_entry(
     })?;
 
     let metadata = entry.metadata().map_err(|err| {
-        Entry::Error(ErrorEntry {
+        FsEntry::Error(ErrorEntry {
             path: Some(entry.path().to_string_lossy().to_string()),
             size: None,
             content: None,
@@ -45,7 +45,7 @@ fn analyse_entry(
     })?;
 
     if metadata.is_file() {
-        Ok(Entry::File(FileEntry {
+        Ok(FsEntry::File(FileEntry {
             path: entry.path().to_string_lossy().to_string(),
             size: metadata.len(),
         }))
@@ -58,10 +58,13 @@ fn analyse_entry(
     }
 }
 
-fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_path: P) -> Entry {
+fn analyze_directory_recursive<P: AsRef<Path>>(
+    context: &mut Context,
+    directory_path: P,
+) -> FsEntry {
     let path_str = directory_path.as_ref().to_string_lossy().to_string();
     if context.should_abort.0.load(atomic::Ordering::Relaxed) {
-        return Entry::Error(ErrorEntry {
+        return FsEntry::Error(ErrorEntry {
             path: Some(path_str),
             size: None,
             content: None,
@@ -76,7 +79,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
 
     let read_dir = fs::read_dir(directory_path);
     if let Err(err) = read_dir {
-        return Entry::Error(ErrorEntry {
+        return FsEntry::Error(ErrorEntry {
             path: Some(path_str),
             size: None,
             content: None,
@@ -86,26 +89,27 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
 
     let read_dir = read_dir.unwrap();
 
-    let mut entries: Vec<Entry> = Vec::new();
+    let mut entries: Vec<FsEntry> = Vec::new();
     for entry in read_dir {
         match analyse_entry(context, entry) {
             Ok(e) | Err(e) => entries.push(e),
         }
     }
 
+
     let size: u64 = entries.iter().map(|entry| entry.size()).sum();
     let number_of_files = entries.iter().map(|entry| entry.number_of_files()).sum();
     context.number_of_files_found += entries
         .iter()
-        .filter(|entry| matches!(entry, Entry::File(_)))
+        .filter(|entry| matches!(entry, FsEntry::File(_)))
         .count() as u64;
     context.total_size_found += entries
         .iter()
-        .filter(|entry| matches!(entry, Entry::File(_)))
+        .filter(|entry| matches!(entry, FsEntry::File(_)))
         .map(|entry| entry.size())
         .sum::<u64>();
 
-    Entry::Dir(DirEntry {
+    FsEntry::Dir(DirEntry {
         path: path_str,
         content: entries,
         size,
@@ -115,7 +119,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(context: &mut Context, directory_
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnalyseResult {
-    result: Entry,
+    result: FsEntry,
     duration: u64,
 }
 
@@ -145,7 +149,7 @@ pub fn analyze_disk_usage(
     if should_abort.0.load(atomic::Ordering::Relaxed) {
         // No sense to send the data collected so far, return an empty result
         return AnalyseResult {
-            result: Entry::Error(ErrorEntry {
+            result: FsEntry::Error(ErrorEntry {
                 path: Some(path),
                 size: None,
                 content: None,
@@ -156,7 +160,7 @@ pub fn analyze_disk_usage(
     }
 
     let flat_result = match result {
-        Entry::Dir(ref d) => Entry::Dir(d.clone_flat(2)),
+        FsEntry::Dir(ref d) => FsEntry::Dir(d.clone_flat(2)),
         _ => panic!(),
     };
 
@@ -179,10 +183,10 @@ pub fn abort(should_abort: tauri::State<'_, ShouldAbort>) {
 pub fn load_nested_directory(
     path: String,
     saved_result: tauri::State<'_, SavedAnalysisResult>,
-) -> Option<Entry> {
+) -> Option<FsEntry> {
     let root_entry = &*saved_result.0.lock().unwrap();
-    if let Some(Entry::Dir(d)) = root_entry {
-        return Some(Entry::Dir(d.get_entry_by_path(path)?.clone_flat(2)));
+    if let Some(FsEntry::Dir(d)) = root_entry {
+        return Some(FsEntry::Dir(d.get_entry_by_path(path)?.clone_flat(2)));
     }
 
     None

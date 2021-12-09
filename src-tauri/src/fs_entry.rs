@@ -2,7 +2,7 @@
 pub struct ErrorEntry {
     pub path: Option<String>,
     pub size: Option<u64>,
-    pub content: Option<Vec<Entry>>,
+    pub content: Option<Vec<FsEntry>>,
     pub reason: String,
 }
 
@@ -17,7 +17,7 @@ pub struct DirEntry {
     pub path: String,
     pub size: u64,
     pub number_of_files: u64,
-    pub content: Vec<Entry>,
+    pub content: Vec<FsEntry>,
 }
 
 impl DirEntry {
@@ -27,9 +27,9 @@ impl DirEntry {
             self.content
                 .iter()
                 .map(|entry| match entry {
-                    Entry::File(f) => Entry::File(f.clone()),
-                    Entry::Error(e) => Entry::Error(e.clone()),
-                    Entry::Dir(d) => Entry::Dir(d.clone_flat(levels_to_keep - 1)),
+                    FsEntry::File(f) => FsEntry::File(f.clone()),
+                    FsEntry::Error(e) => FsEntry::Error(e.clone()),
+                    FsEntry::Dir(d) => FsEntry::Dir(d.clone_flat(levels_to_keep - 1)),
                 })
                 .collect()
         } else {
@@ -46,7 +46,7 @@ impl DirEntry {
     /// Search for an entry recursivly within the current entry
     pub fn get_entry_by_path(&self, path: String) -> Option<&Self> {
         for entry in &self.content {
-            if let Entry::Dir(d) = entry {
+            if let FsEntry::Dir(d) = entry {
                 dbg!("entry", &d.path);
                 if d.path == path {
                     return Some(d);
@@ -61,26 +61,26 @@ impl DirEntry {
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
-pub enum Entry {
+pub enum FsEntry {
     File(FileEntry),
     Dir(DirEntry),
     Error(ErrorEntry),
 }
 
-impl Entry {
+impl FsEntry {
     pub fn size(&self) -> u64 {
         match self {
-            Entry::File(f) => f.size,
-            Entry::Dir(d) => d.size,
-            Entry::Error(_) => 0,
+            FsEntry::File(f) => f.size,
+            FsEntry::Dir(d) => d.size,
+            FsEntry::Error(_) => 0,
         }
     }
 
     pub fn number_of_files(&self) -> u64 {
         match self {
-            Entry::File(_) => 1,
-            Entry::Error(_) => 1,
-            Entry::Dir(d) => d.number_of_files,
+            FsEntry::File(_) => 1,
+            FsEntry::Error(_) => 1,
+            FsEntry::Dir(d) => d.number_of_files,
         }
     }
 }
