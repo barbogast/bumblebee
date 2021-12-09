@@ -97,8 +97,6 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
     }
 
 
-    let size: u64 = entries.iter().map(|entry| entry.size()).sum();
-    let number_of_files = entries.iter().map(|entry| entry.number_of_files()).sum();
     context.number_of_files_found += entries
         .iter()
         .filter(|entry| matches!(entry, FsEntry::File(_)))
@@ -109,12 +107,7 @@ fn analyze_directory_recursive<P: AsRef<Path>>(
         .map(|entry| entry.size())
         .sum::<u64>();
 
-    FsEntry::Dir(DirEntry {
-        path: path_str,
-        content: entries,
-        size,
-        number_of_files,
-    })
+    FsEntry::Dir(DirEntry::new(path_str, entries))
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]

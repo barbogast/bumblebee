@@ -14,13 +14,25 @@ pub struct FileEntry {
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DirEntry {
-    pub path: String,
-    pub size: u64,
-    pub number_of_files: u64,
-    pub content: Vec<FsEntry>,
+    path: String,
+    size: u64,
+    number_of_files: u64,
+    content: Vec<FsEntry>,
 }
 
 impl DirEntry {
+    pub fn new(path: String, entries: Vec<FsEntry>) -> Self {
+        let size: u64 = entries.iter().map(|entry| entry.size()).sum();
+        let number_of_files = entries.iter().map(|entry| entry.number_of_files()).sum();
+
+        Self {
+            path,
+            content: entries,
+            size,
+            number_of_files,
+        }
+    }
+
     /// Clone the current entry with up to `levels_to_keep` depth of its contents
     pub fn clone_flat(&self, levels_to_keep: i32) -> Self {
         let content = if levels_to_keep > 0 {
