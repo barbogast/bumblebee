@@ -33,6 +33,13 @@ impl DirEntry {
         }
     }
 
+    /// Iterator over self.contents which returns only FileEntry entries
+    pub fn iter_files(&self) -> impl Iterator<Item = &FsEntry> {
+        self.content
+            .iter()
+            .filter(|entry| matches!(entry, FsEntry::File(_)))
+    }
+
     /// Clone the current entry with up to `levels_to_keep` depth of its contents
     pub fn clone_flat(&self, levels_to_keep: i32) -> Self {
         let content = if levels_to_keep > 0 {
